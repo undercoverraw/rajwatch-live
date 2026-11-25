@@ -7,7 +7,7 @@ import time
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import feedparser
 import httpx
@@ -32,21 +32,18 @@ YT_LIVE_HEADERS = {
     "Cookie": "CONSENT=YES+cb; SOCS=CAI",
 }
 
-# Verified Rajasthan News YouTube Channel RSS Feeds
 YOUTUBE_CHANNELS = [
     ("First India News", "UC_cZYFovNQTsKw1ZLmO_AMA"),
     ("Zee Rajasthan", "UCfnvGSUXKIuaCv-9E9a2UJg"),
     ("News18 Rajasthan", "UC7FlLbNo66YsCEAPuJITiNg"),
 ]
 
-# Direct Rajasthan Newspaper Websites RSS
 NEWSPAPER_FEEDS = [
     ("Dainik Bhaskar", "https://feeds.bhaskar.com/rajasthan/"),
     ("Rajasthan Patrika", "https://www.patrika.com/rss/rajasthan/"),
     ("Zee News Rajasthan", "https://zeenews.india.com/rss/india/rajasthan.xml"),
 ]
 
-# Negative / Against-Govt Keywords (Hindi + English + Hinglish)
 NEGATIVE_WORDS = [
     "leak", "scam", "protest", "dharna", "virodh", "ghotala", "bhrashtachar",
     "lathicharge", "hadsa", "accident", "fire", "arrest", "murder", "crime",
@@ -64,7 +61,6 @@ NEGATIVE_WORDS = [
     "मौत", "शर्मनाक", "चोरी", "लूट", "फेल", "तंज", "निशाना", "बदहाल",
 ]
 
-# Positive / Pro-Govt Keywords (Hindi + English + Hinglish)
 POSITIVE_WORDS = [
     "launch", "launched", "inaugurate", "inaugurated", "approved", "approval",
     "development", "growth", "scheme", "relief", "bonus", "award", "praise",
@@ -145,8 +141,7 @@ DEPARTMENTS = {
 
 def get_cookie_pool():
     pool = []
-    suffixes = ["", "_2", "_3"]
-    for s in suffixes:
+    for s in ["", "_2", "_3"]:
         auth = os.getenv(f"X_AUTH_TOKEN{s}", "").strip()
         ct0 = os.getenv(f"X_CT0{s}", "").strip()
         if auth and ct0:
@@ -154,7 +149,8 @@ def get_cookie_pool():
     return pool
 
 
-x_cache = {"query": "", "ts": 0.0, "items": [], "status": "idle", "error": ""}
+# Cache keyed by (query + date) so Live and Back-Date queries never collide
+x_cache: Dict[str, Dict[str, Any]] = {}
 cookie_turn = 0
 DAILY_TRACKER: Dict[str, Any] = {"date": "", "items": {}}
 LIVE_TV_CACHE: Dict[str, Any] = {"ts": 0.0, "streams": []}
@@ -237,13 +233,31 @@ def enrich_item(item: Dict[str, Any]) -> Dict[str, Any]:
         "department": detect_department(text),
         "hour_ist": dt_ist.hour,
         "date_ist": dt_ist.strftime("%Y-%m-%d"),
+        "date_label": dt_ist.strftime("%d %b"),
         "time_str": dt_ist.strftime("%I:%M %p"),
     })
     return item
 
 
-# EXACT WORKING X FETCHER (using twifork) — Untouched
-async def fetch_x_tweets(keywords: list[str], force: bool = False):
+def validate_date(date_str: str) -> Optional[Tuple[str, str]]:
+    """Returns (target_date, next_date) in YYYY-MM-DD format if valid past/specific date."""
+    s = (date_str or "").strip()
+    if not s:
+        return None
+    try:
+        dt = datetime.strptime(s, "%Y-%m-%d")
+        next_dt = dt + timedelta(days=1)
+        return (dt.strftime("%Y-%m-%d"), next_dt.strftime("%Y-%m-%d"))
+    except ValueError:
+        return None
+
+
+# EXACT WORKING X FETCHER (twifork) + Back-Date (since: / until:) support
+async def fetch_x_tweets(
+    keywords: list[str],
+    force: bool = False,
+    date_window: Optional[Tuple[str, str]] = None,
+):
     global cookie_turn
     pool = get_cookie_pool()
     if not pool:
@@ -252,12 +266,22 @@ async def fetch_x_tweets(keywords: list[str], force: bool = False):
     clean_kw = [k.strip() for k in keywords if k.strip()][:7]
     if not clean_kw:
         clean_kw = ["Rajasthan govt", "Bhajanlal", "RajCMO", "Jaipur"]
-    query_str = "(" + " OR ".join([f'"{k}"' if " " in k else k for k in clean_kw]) + ") -is:retweet"
+    base_q = "(" + " OR ".join([f'"{k}"' if " " in k else k for k in clean_kw]) + ") -is:retweet"
+
+    if date_window:
+        start_d, end_d = date_window
+        query_str = f"{base_q} since:{start_d} until:{end_d}"
+        fetch_count = 35
+        min_gap = 20 if force else 120  # Cache archive dates longer to protect rate limits
+    else:
+        query_str = base_q
+        fetch_count = 20
+        min_gap = 12 if force else 22
 
     now = time.time()
-    min_gap = 12 if force else 22
-    if x_cache["query"] == query_str and (now - x_cache["ts"]) < min_gap and x_cache["items"]:
-        return x_cache["items"], f"live ({len(pool)} acc)", ""
+    cached = x_cache.get(query_str)
+    if cached and (now - cached["ts"]) < min_gap and cached["items"]:
+        return cached["items"], f"live ({len(pool)} acc)", ""
 
     creds = pool[cookie_turn % len(pool)]
     cookie_turn += 1
@@ -265,7 +289,7 @@ async def fetch_x_tweets(keywords: list[str], force: bool = False):
     try:
         client = Client("en-US")
         client.set_cookies(creds)
-        tweets = await client.search_tweet(query_str, "Latest", count=20)
+        tweets = await client.search_tweet(query_str, "Latest", count=fetch_count)
         results = []
         for t in tweets:
             text = getattr(t, "text", "") or ""
@@ -286,18 +310,34 @@ async def fetch_x_tweets(keywords: list[str], force: bool = False):
                 "likes": getattr(t, "favorite_count", 0) or 0,
                 "retweets": getattr(t, "retweet_count", 0) or 0,
             }))
-        x_cache.update({"query": query_str, "ts": now, "items": results, "status": "live", "error": ""})
+
+        # Keep cache size bounded
+        if len(x_cache) > 25:
+            oldest_q = sorted(x_cache.keys(), key=lambda k: x_cache[k]["ts"])[0]
+            x_cache.pop(oldest_q, None)
+        x_cache[query_str] = {"ts": now, "items": results}
         return results, f"live ({len(pool)} acc)", ""
     except Exception as e:
         err_msg = str(e)[:140]
-        return x_cache["items"], "warning", f"X temporary error: {err_msg}"
+        fallback = cached["items"] if cached else []
+        return fallback, "warning", f"X temporary error: {err_msg}"
 
 
-async def fetch_google_news(http: httpx.AsyncClient, keywords: list[str], lang: str = "en"):
+async def fetch_google_news(
+    http: httpx.AsyncClient,
+    keywords: list[str],
+    lang: str = "en",
+    date_window: Optional[Tuple[str, str]] = None,
+):
     top_kw = [k.strip() for k in keywords if k.strip()][:5]
     if not top_kw:
         top_kw = ["Rajasthan government", "Bhajanlal Sharma", "Jaipur"]
-    q = "(" + " OR ".join(f'"{k}"' if " " in k else k for k in top_kw) + ") Rajasthan when:1d"
+    kw_part = "(" + " OR ".join(f'"{k}"' if " " in k else k for k in top_kw) + ") Rajasthan"
+    if date_window:
+        q = f"{kw_part} after:{date_window[0]} before:{date_window[1]}"
+    else:
+        q = f"{kw_part} when:1d"
+
     if lang == "hi":
         url = f"https://news.google.com/rss/search?q={urllib.parse.quote(q)}&hl=hi&gl=IN&ceid=IN:hi"
     else:
@@ -311,7 +351,11 @@ async def fetch_google_news(http: httpx.AsyncClient, keywords: list[str], lang: 
             raw_title = clean_text(entry.get("title", ""))
             link = entry.get("link", "")
             pub = entry.get("published", "")
-            source_name = entry.get("source", {}).get("title", "Rajasthan News") if isinstance(entry.get("source"), dict) else "Rajasthan News"
+            source_name = (
+                entry.get("source", {}).get("title", "Rajasthan News")
+                if isinstance(entry.get("source"), dict)
+                else "Rajasthan News"
+            )
             if " - " in raw_title and source_name == "Rajasthan News":
                 parts = raw_title.rsplit(" - ", 1)
                 raw_title, source_name = parts[0].strip(), parts[1].strip()
@@ -319,6 +363,7 @@ async def fetch_google_news(http: httpx.AsyncClient, keywords: list[str], lang: 
                 "id": f"gn_{lang}_{abs(hash(link or raw_title))}",
                 "source": "NEWS",
                 "author": source_name,
+                "handle": "",
                 "text": raw_title,
                 "url": link,
                 "ts": parse_timestamp(pub),
@@ -346,6 +391,7 @@ async def fetch_newspaper_feeds(http: httpx.AsyncClient):
                     "id": f"paper_{abs(hash(link or title))}",
                     "source": "NEWSPAPER",
                     "author": name,
+                    "handle": "",
                     "text": title,
                     "url": link,
                     "ts": parse_timestamp(pub),
@@ -377,6 +423,7 @@ async def fetch_youtube_feeds(http: httpx.AsyncClient):
                     "video_id": vid,
                     "source": "YOUTUBE",
                     "author": ch_name,
+                    "handle": "",
                     "text": title,
                     "url": link,
                     "ts": parse_timestamp(pub),
@@ -391,7 +438,6 @@ async def fetch_youtube_feeds(http: httpx.AsyncClient):
     return [it for b in batches for it in b]
 
 
-# Resolves exact active Live Video ID per channel (fixes "This video is unavailable")
 async def resolve_live_tv(http: httpx.AsyncClient, yt_items: List[Dict[str, Any]], force: bool = False):
     now = time.time()
     ttl = 60 if force else 600
@@ -400,7 +446,6 @@ async def resolve_live_tv(http: httpx.AsyncClient, yt_items: List[Dict[str, Any]
 
     async def get_live_stream(ch_name: str, cid: str):
         vid = None
-        # Method 1: Check channel's /live page for exact canonical watch?v= video ID
         try:
             r = await http.get(f"https://www.youtube.com/channel/{cid}/live", headers=YT_LIVE_HEADERS, timeout=7.0)
             m = re.search(r'<link rel="canonical" href="https://www\.youtube\.com/watch\?v=([A-Za-z0-9_-]{11})"', r.text)
@@ -413,7 +458,6 @@ async def resolve_live_tv(http: httpx.AsyncClient, yt_items: List[Dict[str, Any]
         except Exception:
             pass
 
-        # Method 2: Check channel's /streams tab for active live stream ID
         if not vid:
             try:
                 r2 = await http.get(f"https://www.youtube.com/channel/{cid}/streams", headers=YT_LIVE_HEADERS, timeout=7.0)
@@ -427,7 +471,6 @@ async def resolve_live_tv(http: httpx.AsyncClient, yt_items: List[Dict[str, Any]
             except Exception:
                 pass
 
-        # Method 3: Guaranteed fallback to latest video from this channel's XML feed
         if not vid:
             for item in yt_items:
                 if item.get("author") == ch_name and len(item.get("video_id", "")) == 11:
@@ -461,30 +504,44 @@ async def serve_home():
 async def api_feed(
     keywords: str = Query(default="Bhajanlal,RajCMO,Rajasthan govt,Jaipur,paper leak,RPSC"),
     force: bool = Query(default=False),
+    date: str = Query(default=""),
 ):
     kw_list = [k.strip() for k in keywords.split(",") if k.strip()]
+    now_ist = datetime.now(IST)
+    today_str = now_ist.strftime("%Y-%m-%d")
+
+    date_window = validate_date(date)
+    is_archive = date_window is not None and date_window[0] != today_str
 
     async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as http:
-        x_res, news_en, news_hi, papers, yt_items = await asyncio.gather(
-            fetch_x_tweets(kw_list, force=force),
-            fetch_google_news(http, kw_list, lang="en"),
-            fetch_google_news(http, kw_list, lang="hi"),
-            fetch_newspaper_feeds(http),
-            fetch_youtube_feeds(http),
-        )
-        live_tv = await resolve_live_tv(http, yt_items, force=force)
+        if is_archive:
+            # Back-date mode: fetch X + Hindi/English News strictly for selected date
+            x_res, news_en, news_hi = await asyncio.gather(
+                fetch_x_tweets(kw_list, force=force, date_window=date_window),
+                fetch_google_news(http, kw_list, lang="en", date_window=date_window),
+                fetch_google_news(http, kw_list, lang="hi", date_window=date_window),
+            )
+            papers, yt_items = [], []
+            live_tv = LIVE_TV_CACHE["streams"] or await resolve_live_tv(http, [], force=False)
+        else:
+            # Live mode: fetch X + News + Newspapers + YouTube + Live TV
+            x_res, news_en, news_hi, papers, yt_items = await asyncio.gather(
+                fetch_x_tweets(kw_list, force=force, date_window=None),
+                fetch_google_news(http, kw_list, lang="en", date_window=None),
+                fetch_google_news(http, kw_list, lang="hi", date_window=None),
+                fetch_newspaper_feeds(http),
+                fetch_youtube_feeds(http),
+            )
+            live_tv = await resolve_live_tv(http, yt_items, force=force)
 
     x_items, x_status, x_error = x_res
     raw_items = x_items + news_hi + news_en + papers + yt_items
 
-    now_ist = datetime.now(IST)
-    today_str = now_ist.strftime("%Y-%m-%d")
     cutoff = now_ist.timestamp() - 86400
-
     deduped = []
     seen_keys = set()
     for it in sorted(raw_items, key=lambda x: x["ts"], reverse=True):
-        if it["ts"] < cutoff:
+        if not is_archive and it["ts"] < cutoff:
             continue
         k = f"{it['source']}_{re.sub(r'[^a-zA-Z0-9\u0900-\u097F]+', '', it['text'].lower())[:50]}"
         if not k or k in seen_keys:
@@ -492,37 +549,54 @@ async def api_feed(
         seen_keys.add(k)
         deduped.append(it)
 
-    if DAILY_TRACKER["date"] != today_str:
-        DAILY_TRACKER["date"] = today_str
-        DAILY_TRACKER["items"] = {}
-    for it in deduped:
-        if it["date_ist"] == today_str:
-            DAILY_TRACKER["items"][it["id"]] = {
-                "hour": it["hour_ist"],
-                "sentiment": it["sentiment"],
-            }
-    if len(DAILY_TRACKER["items"]) > 1000:
-        for old_k in list(DAILY_TRACKER["items"].keys())[:200]:
-            DAILY_TRACKER["items"].pop(old_k, None)
-
-    hours_range = list(range(0, now_ist.hour + 1))
-    h_pos = {h: 0 for h in hours_range}
-    h_neg = {h: 0 for h in hours_range}
-    h_neu = {h: 0 for h in hours_range}
-    for rec in DAILY_TRACKER["items"].values():
-        h = rec["hour"]
-        if h in h_pos:
-            if rec["sentiment"] == "positive":
+    # Hourly Chart: 00:00..23:00 for back-date, or rolling today tracker for Live mode
+    if is_archive:
+        hours_range = list(range(0, 24))
+        h_pos = {h: 0 for h in hours_range}
+        h_neg = {h: 0 for h in hours_range}
+        h_neu = {h: 0 for h in hours_range}
+        for it in deduped:
+            h = it["hour_ist"]
+            if it["sentiment"] == "positive":
                 h_pos[h] += 1
-            elif rec["sentiment"] == "negative":
+            elif it["sentiment"] == "negative":
                 h_neg[h] += 1
             else:
                 h_neu[h] += 1
+    else:
+        if DAILY_TRACKER["date"] != today_str:
+            DAILY_TRACKER["date"] = today_str
+            DAILY_TRACKER["items"] = {}
+        for it in deduped:
+            if it["date_ist"] == today_str:
+                DAILY_TRACKER["items"][it["id"]] = {
+                    "hour": it["hour_ist"],
+                    "sentiment": it["sentiment"],
+                }
+        if len(DAILY_TRACKER["items"]) > 1000:
+            for old_k in list(DAILY_TRACKER["items"].keys())[:200]:
+                DAILY_TRACKER["items"].pop(old_k, None)
 
+        hours_range = list(range(0, now_ist.hour + 1))
+        h_pos = {h: 0 for h in hours_range}
+        h_neg = {h: 0 for h in hours_range}
+        h_neu = {h: 0 for h in hours_range}
+        for rec in DAILY_TRACKER["items"].values():
+            h = rec["hour"]
+            if h in h_pos:
+                if rec["sentiment"] == "positive":
+                    h_pos[h] += 1
+                elif rec["sentiment"] == "negative":
+                    h_neg[h] += 1
+                else:
+                    h_neu[h] += 1
+
+    # Stats, Districts, Departments & Account-Wise Bifurcation
     pos_total = neg_total = neu_total = 0
     x_total = hi_total = en_total = yt_total = np_total = 0
     district_stats: Dict[str, Dict[str, int]] = {}
     dept_stats: Dict[str, Dict[str, int]] = {}
+    account_stats: Dict[str, Dict[str, Any]] = {}
 
     for it in deduped:
         s = it["sentiment"]
@@ -562,16 +636,64 @@ async def api_feed(
         elif s == "positive":
             dept_stats[dp]["positive"] += 1
 
+        # Account-Wise Positive/Negative Bifurcation
+        acc_key = f"{src}::{it['author']}"
+        if acc_key not in account_stats:
+            account_stats[acc_key] = {
+                "author": it["author"],
+                "handle": it.get("handle") or "",
+                "source": src,
+                "total": 0,
+                "positive": 0,
+                "negative": 0,
+                "neutral": 0,
+                "likes": 0,
+                "retweets": 0,
+                "last_ts": it["ts"],
+            }
+        acc = account_stats[acc_key]
+        acc["total"] += 1
+        acc[s] += 1
+        acc["likes"] += int(it.get("likes") or 0)
+        acc["retweets"] += int(it.get("retweets") or 0)
+        if it["ts"] > acc["last_ts"]:
+            acc["last_ts"] = it["ts"]
+
+    accounts_list = []
+    for acc in account_stats.values():
+        t = max(acc["total"], 1)
+        acc["pos_pct"] = round((acc["positive"] / t) * 100, 1)
+        acc["neg_pct"] = round((acc["negative"] / t) * 100, 1)
+        acc["neu_pct"] = round((acc["neutral"] / t) * 100, 1)
+        if acc["negative"] > acc["positive"]:
+            acc["stance"] = "Negative"
+        elif acc["positive"] > acc["negative"]:
+            acc["stance"] = "Positive"
+        elif acc["negative"] > 0:
+            acc["stance"] = "Mixed"
+        else:
+            acc["stance"] = "Neutral"
+        accounts_list.append(acc)
+
+    accounts_list.sort(key=lambda a: (a["total"], a["negative"]), reverse=True)
+
     total = max(len(deduped), 1)
     neg_pct = round((neg_total / total) * 100, 1)
     pos_pct = round((pos_total / total) * 100, 1)
     neu_pct = round((neu_total / total) * 100, 1)
-    recent_neg = sum(1 for it in deduped if it["sentiment"] == "negative" and (now_ist.timestamp() - it["ts"]) <= 7200)
-    crisis_score = min(100, int((neg_pct * 1.3) + (recent_neg * 4)))
+    recent_neg = (
+        neg_total
+        if is_archive
+        else sum(1 for it in deduped if it["sentiment"] == "negative" and (now_ist.timestamp() - it["ts"]) <= 7200)
+    )
+    crisis_score = min(100, int((neg_pct * 1.3) + (recent_neg * 4))) if deduped else 0
 
     return {
         "server_time": time.time(),
         "updated_at": now_ist.strftime("%d %b %Y, %I:%M:%S %p IST"),
+        "mode": "archive" if is_archive else "live",
+        "active_date": date_window[0] if is_archive else today_str,
+        "today_date": today_str,
         "x_status": x_status,
         "x_error": x_error,
         "count": len(deduped),
@@ -606,6 +728,7 @@ async def api_feed(
             key=lambda x: (x["negative"], x["total"]),
             reverse=True,
         ),
+        "accounts": accounts_list,
         "live_tv": live_tv,
-        "items": deduped[:140],
+        "items": deduped[:160],
     }
