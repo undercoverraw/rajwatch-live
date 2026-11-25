@@ -7,14 +7,19 @@ import re
 import time
 import urllib.parse
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import feedparser
 import httpx
 from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 
-app = FastAPI(title="RajWatch Pro - 360 Media & Sentiment War Room")
+try:
+    from twikit import Client as TwikitClient
+except Exception:
+    TwikitClient = None
+
+app = FastAPI(title="RajWatch Pro - 360 Media, X & Live TV War Room")
 
 IST = timezone(timedelta(hours=5, minutes=30))
 HEADERS = {
@@ -26,22 +31,19 @@ HEADERS = {
     "Accept-Language": "hi-IN,hi;q=0.9,en-IN;q=0.8,en;q=0.7",
 }
 
-# Simple 45-second cache so Render Free Tier stays fast
 FEED_CACHE: Dict[str, Dict[str, Any]] = {}
-CACHE_TTL_SECONDS = 45
+CACHE_TTL_SECONDS = 40
+X_ACCOUNT_INDEX = 0
 
-# Bilingual (Hindi + English) Government Sentiment Lexicon
 NEGATIVE_WORDS = [
-    # English
     "scam", "leak", "paper leak", "protest", "strike", "outrage", "anger",
     "corruption", "bribe", "arrest", "suspended", "suspend", "fail", "failure",
     "shortage", "crisis", "attack", "accused", "allegation", "fraud", "cheat",
     "death", "killed", "murder", "rape", "crime", "clash", "violence", "lathicharge",
     "water crisis", "power cut", "blackout", "unemployment", "inflation", "delay",
-    "negligence", "collapse", "fir", "ed raid", "acb", "trap", "opposition slams",
-    "slams", "criticize", "condemn", "furious", "dharna", "agitation", "boycott",
-    "irregularities", "mismanagement", "unsafe", "scandal", "resign", "worst",
-    # Hindi (Devanagari)
+    "negligence", "collapse", "fir", "ed raid", "acb", "trap", "slams", "criticize",
+    "condemn", "furious", "dharna", "agitation", "boycott", "irregularities",
+    "mismanagement", "unsafe", "scandal", "resign", "worst", "shame",
     "घोटाला", "पेपर लीक", "लीक", "विरोध", "धरना", "प्रदर्शन", "हंगामा", "भ्रष्टाचार",
     "आरोप", "निंदा", "नाकाम", "विफल", "आक्रोश", "गुस्सा", "लाठीचार्ज", "गिरफ्तारी",
     "निलंबित", "सस्पेंड", "हड़ताल", "चक्का जाम", "किल्लत", "संकट", "कटौती", "बिजली कटौती",
@@ -49,13 +51,11 @@ NEGATIVE_WORDS = [
     "हत्या", "अपराध", "बवाल", "झड़प", "हमला", "बेरोजगारी", "महंगाई", "नाराजगी",
     "इस्तीफा", "घेराव", "बहिष्कार", "सवाल", "तंज", "निशाना", "बदहाल", "खस्ताहाल",
     "मौत", "हादसा", "अन्याय", "शर्मनाक", "चोरी", "लूट", "फेल",
-    # Romanized Hindi
     "ghotala", "virodh", "hungama", "bhrashtachar", "aarop", "aakrosh", "dhandhli",
     "laparwahi", "rishwat", "hadtal", "katal", "bawal", "sankat", "killat",
 ]
 
 POSITIVE_WORDS = [
-    # English
     "launch", "launched", "inaugurate", "inaugurated", "approved", "approval",
     "development", "growth", "scheme", "relief", "bonus", "award", "praise",
     "success", "successful", "record", "investment", "mou", "jobs", "recruitment",
@@ -63,13 +63,11 @@ POSITIVE_WORDS = [
     "free", "subsidy", "grant", "milestone", "top", "best", "historic", "gift",
     "celebrate", "congratulate", "initiative", "reforms", "digital", "clean",
     "green", "highway", "metro", "hospital", "school", "compensation", "support",
-    # Hindi (Devanagari)
     "उद्घाटन", "शिलान्यास", "योजना", "तोहफा", "सौगात", "विकास", "बधाई", "सफल",
     "सफलता", "राहत", "मंजूरी", "बजट", "निवेश", "रोजगार", "भर्ती", "नौकरी",
     "पुरस्कार", "सम्मान", "तारीफ", "सराहना", "ऐतिहासिक", "रिकॉर्ड", "लाभ", "फायदा",
     "मुफ्त", "फ्री", "सब्सिडी", "मुआवजा", "खुशखबरी", "बेहतर", "प्रगति", "कल्याण",
     "समझौता", "एमओयू", "बढ़ोतरी", "मजबूत", "उपलब्धि", "शुरुआत", "सहायता", "स्वागत",
-    # Romanized Hindi
     "saugat", "tohfa", "vikas", "yojana", "rahat", "manzoori", "safal", "khushkhabri",
     "udghatan", "bharti", "rozgar", "badhai",
 ]
@@ -105,7 +103,7 @@ DISTRICTS = {
 
 DEPARTMENTS = {
     "Politics & CMO": [
-        "cm", "bhajanlal", "cmo", "congress", "bjp", "minister", "mla", "mp",
+        "cm", "bhajanlal", "cmo", "rajcmo", "congress", "bjp", "minister", "mla", "mp",
         "election", "zila pramukh", "jila pramukh", "panchayat", "vidhan sabha",
         "भजनलाल", "मुख्यमंत्री", "कांग्रेस", "भाजपा", "मंत्री", "विधायक", "चुनाव",
         "जिला प्रमुख", "विधानसभा", "सरकार", "मंत्रिमंडल",
@@ -153,23 +151,17 @@ def analyze_sentiment(text: str) -> Dict[str, Any]:
     neg_hits = [w for w in NEGATIVE_WORDS if w in lower]
     pos_hits = [w for w in POSITIVE_WORDS if w in lower]
 
-    neg_score = len(neg_hits)
-    pos_score = len(pos_hits)
-
-    if neg_score > pos_score:
+    if len(neg_hits) > len(pos_hits):
         label = "negative"
-    elif pos_score > neg_score:
+    elif len(pos_hits) > len(neg_hits):
         label = "positive"
-    elif neg_score > 0 and neg_score == pos_score:
-        # In political monitoring, mixed alerts are treated cautiously as negative
+    elif len(neg_hits) > 0:
         label = "negative"
     else:
         label = "neutral"
 
     return {
         "label": label,
-        "neg_count": neg_score,
-        "pos_count": pos_score,
         "triggers": (neg_hits if label == "negative" else pos_hits)[:3],
     }
 
@@ -191,7 +183,7 @@ def detect_department(text: str) -> str:
 
 
 def format_time_ago(dt_ist: datetime, now_ist: datetime) -> str:
-    diff = int((now_ist - dt_ist).total_seconds())
+    diff = max(0, int((now_ist - dt_ist).total_seconds()))
     if diff < 60:
         return "Just now"
     if diff < 3600:
@@ -214,11 +206,124 @@ def parse_rss_datetime(entry: Any, fallback: datetime) -> datetime:
     return fallback
 
 
+def get_x_accounts() -> List[Tuple[str, str]]:
+    accounts: List[Tuple[str, str]] = []
+    suffixes = ["", "_2", "_3"]
+    for sfx in suffixes:
+        tok = (os.getenv(f"X_AUTH_TOKEN{sfx}") or "").strip().strip('"').strip("'")
+        ct0 = (os.getenv(f"X_CT0{sfx}") or "").strip().strip('"').strip("'")
+        if tok and ct0:
+            accounts.append((tok, ct0))
+    return accounts
+
+
+async def fetch_x_live(
+    client: httpx.AsyncClient,
+    kw_list: List[str],
+) -> Tuple[List[Dict[str, Any]], str, str]:
+    global X_ACCOUNT_INDEX
+    now_ist = datetime.now(IST)
+    accounts = get_x_accounts()
+    x_query = " OR ".join(f'"{k}"' if " " in k else k for k in kw_list[:5])
+
+    if not accounts:
+        backup = await fetch_google_news(
+            client,
+            f"(site:x.com OR site:twitter.com) ({x_query})",
+            lang="hi",
+            category="x",
+            limit=15,
+        )
+        return (
+            backup,
+            "PENDING",
+            "Render Environment mein exact KEY naam X_AUTH_TOKEN aur X_CT0 add karein (abhi backup X index posts dikh rahe hain).",
+        )
+
+    if TwikitClient is None:
+        return ([], "ERROR", "twikit package install nahi hua — requirements.txt check karein.")
+
+    last_err = ""
+    for attempt in range(len(accounts)):
+        idx = (X_ACCOUNT_INDEX + attempt) % len(accounts)
+        auth_token, ct0 = accounts[idx]
+        try:
+            tw_client = TwikitClient("en-US")
+            tw_client.set_cookies({"auth_token": auth_token, "ct0": ct0})
+            tweets = await asyncio.wait_for(
+                tw_client.search_tweet(f"({x_query}) -filter:retweets", "Latest", count=20),
+                timeout=14.0,
+            )
+            X_ACCOUNT_INDEX = (idx + 1) % len(accounts)
+
+            items: List[Dict[str, Any]] = []
+            for tw in tweets or []:
+                text = clean_text(getattr(tw, "text", "") or getattr(tw, "full_text", ""))
+                if not text:
+                    continue
+                user = getattr(tw, "user", None)
+                screen_name = getattr(user, "screen_name", "x_user") if user else "x_user"
+                display_name = getattr(user, "name", screen_name) if user else screen_name
+                tw_id = getattr(tw, "id", str(time.time()))
+
+                dt_ist = now_ist
+                created_raw = getattr(tw, "created_at", None)
+                if created_raw:
+                    try:
+                        dt_parsed = datetime.strptime(str(created_raw), "%a %b %d %H:%M:%S %z %Y")
+                        dt_ist = dt_parsed.astimezone(IST)
+                    except Exception:
+                        pass
+
+                sentiment = analyze_sentiment(text)
+                likes = getattr(tw, "favorite_count", 0) or 0
+                retweets = getattr(tw, "retweet_count", 0) or 0
+
+                items.append(
+                    {
+                        "id": f"x_{tw_id}",
+                        "title": text,
+                        "source": f"{display_name} (@{screen_name})",
+                        "url": f"https://x.com/{screen_name}/status/{tw_id}",
+                        "category": "x",
+                        "language": detect_language(text),
+                        "sentiment": sentiment["label"],
+                        "triggers": sentiment["triggers"],
+                        "district": detect_district(text),
+                        "department": detect_department(text),
+                        "published_ts": dt_ist.timestamp(),
+                        "hour_ist": dt_ist.hour,
+                        "time_str": dt_ist.strftime("%I:%M %p"),
+                        "time_ago": format_time_ago(dt_ist, now_ist),
+                        "metrics": f"♥ {likes}  ↻ {retweets}",
+                        "video_id": None,
+                    }
+                )
+
+            return (items, "LIVE", f"X Live Connected ({len(items)} live tweets fetched)")
+        except Exception as e:
+            last_err = str(e)[:120]
+
+    # Fallback if cookies expired or X blocked the session
+    backup = await fetch_google_news(
+        client,
+        f"(site:x.com OR site:twitter.com) ({x_query})",
+        lang="hi",
+        category="x",
+        limit=15,
+    )
+    return (
+        backup,
+        "ERROR",
+        f"X Cookie Error ({last_err}) — Fresh auth_token & ct0 update karein. Backup X posts dikh rahe hain.",
+    )
+
+
 async def fetch_google_news(
     client: httpx.AsyncClient,
     query: str,
     lang: str = "hi",
-    category: str = "news",
+    category: str = "hindi_news",
     limit: int = 25,
 ) -> List[Dict[str, Any]]:
     encoded_q = urllib.parse.quote(f"{query} when:1d")
@@ -261,6 +366,7 @@ async def fetch_google_news(
                     "hour_ist": dt_ist.hour,
                     "time_str": dt_ist.strftime("%I:%M %p"),
                     "time_ago": format_time_ago(dt_ist, now_ist),
+                    "metrics": "",
                     "video_id": None,
                 }
             )
@@ -298,7 +404,6 @@ async def fetch_youtube_search(
     limit: int = 12,
 ) -> List[Dict[str, Any]]:
     encoded_q = urllib.parse.quote(query)
-    # EgJAAQ%3D%3D = Live right now | EgIIAg%3D%3D = Uploaded Today
     sp = "EgJAAQ%3D%3D" if live_only else "EgIIAg%3D%3D"
     url = f"https://www.youtube.com/results?search_query={encoded_q}&sp={sp}"
 
@@ -311,7 +416,7 @@ async def fetch_youtube_search(
 
         match = re.search(r"var ytInitialData = (\{.*?\});</script>", resp.text)
         if not match:
-            match = re.search(r"ytInitialData\"\s*\]\s*=\s*(\{.*?\});", resp.text)
+            match = re.search(r'ytInitialData"\]\s*=\s*(\{.*?\});', resp.text)
         if not match:
             return output
 
@@ -331,7 +436,6 @@ async def fetch_youtube_search(
             pub_text = clean_text(_extract_yt_text(r.get("publishedTimeText")))
             view_text = clean_text(_extract_yt_text(r.get("shortViewCountText")))
 
-            # Estimate approximate IST timestamp from YouTube relative time
             est_dt = now_ist
             m_min = re.search(r"(\d+)\s*minute", pub_text.lower())
             m_hr = re.search(r"(\d+)\s*hour", pub_text.lower())
@@ -357,9 +461,8 @@ async def fetch_youtube_search(
                     "hour_ist": est_dt.hour,
                     "time_str": "LIVE TV" if live_only else est_dt.strftime("%I:%M %p"),
                     "time_ago": "LIVE NOW" if live_only else (pub_text or "Today"),
-                    "views": view_text,
+                    "metrics": view_text,
                     "video_id": vid,
-                    "thumbnail": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg",
                 }
             )
             if len(output) >= limit:
@@ -379,7 +482,7 @@ async def serve_home():
 @app.get("/api/feed")
 async def get_feed(
     keywords: str = Query(
-        default="Rajasthan,Bhajanlal,Jaipur,RPSC,paper leak,Jila Pramukh"
+        default="Rajasthan,Bhajanlal,RajCMO,Jaipur,RPSC,paper leak,Jila Pramukh"
     )
 ):
     cache_key = keywords.strip().lower()
@@ -392,7 +495,6 @@ async def get_feed(
     if not kw_list:
         kw_list = ["Rajasthan", "Jaipur", "Bhajanlal"]
 
-    # Build concise OR query (top 6 keywords)
     or_query = " OR ".join(f'"{k}"' if " " in k else k for k in kw_list[:6])
     portal_query = (
         "(site:bhaskar.com OR site:patrika.com OR site:firstindianews.com "
@@ -403,33 +505,36 @@ async def get_feed(
 
     async with httpx.AsyncClient() as client:
         results = await asyncio.gather(
-            # 1. Hindi News (All India & Rajasthan)
+            fetch_x_live(client, kw_list),
             fetch_google_news(client, or_query, lang="hi", category="hindi_news", limit=35),
-            # 2. English News
             fetch_google_news(client, or_query, lang="en", category="english_news", limit=30),
-            # 3. Direct Major News Websites / Portals
             fetch_google_news(client, portal_query, lang="hi", category="website", limit=25),
-            # 4. YouTube Today's Videos (Direct Search)
             fetch_youtube_search(client, f"Rajasthan news {kw_list[0]}", live_only=False, limit=18),
-            # 5. Live TV Streams running RIGHT NOW on YouTube
             fetch_youtube_search(client, "Rajasthan news live tv News18 Zee First India", live_only=True, limit=6),
-            # 6. YouTube RSS Backup (in case YT rate-limits Render IP)
             fetch_google_news(client, yt_fallback_query, lang="hi", category="youtube", limit=15),
             return_exceptions=True,
         )
 
     all_items: List[Dict[str, Any]] = []
     live_tv_streams: List[Dict[str, Any]] = []
+    x_status = "PENDING"
+    x_message = ""
 
-    for idx, res in enumerate(results):
+    # Process X Result
+    if not isinstance(results[0], Exception) and isinstance(results[0], tuple):
+        x_items, x_status, x_message = results[0]
+        all_items.extend(x_items)
+
+    # Process News, Websites, YouTube, Live TV
+    for idx in range(1, len(results)):
+        res = results[idx]
         if isinstance(res, Exception) or not isinstance(res, list):
             continue
-        if idx == 4:
+        if idx == 5:
             live_tv_streams = res
         else:
             all_items.extend(res)
 
-    # Deduplicate by normalized title prefix
     deduped: List[Dict[str, Any]] = []
     seen_titles = set()
     for item in sorted(all_items, key=lambda x: x["published_ts"], reverse=True):
@@ -439,10 +544,8 @@ async def get_feed(
         seen_titles.add(key)
         deduped.append(item)
 
-    # Build Full-Day Hourly Sentiment Graph (IST: 00:00 up to current hour)
     now_ist = datetime.now(IST)
-    current_hour = now_ist.hour
-    hours_range = list(range(0, current_hour + 1))
+    hours_range = list(range(0, now_ist.hour + 1))
     hourly_pos = {h: 0 for h in hours_range}
     hourly_neg = {h: 0 for h in hours_range}
     hourly_neu = {h: 0 for h in hours_range}
@@ -451,7 +554,7 @@ async def get_feed(
     dept_stats: Dict[str, Dict[str, int]] = {}
 
     pos_total = neg_total = neu_total = 0
-    hindi_total = eng_total = yt_total = web_total = 0
+    x_total = hindi_total = eng_total = yt_total = web_total = 0
 
     for item in deduped:
         s = item["sentiment"]
@@ -462,17 +565,19 @@ async def get_feed(
         else:
             neu_total += 1
 
+        cat = item["category"]
+        if cat == "x":
+            x_total += 1
+        elif cat == "youtube":
+            yt_total += 1
+        elif cat == "website":
+            web_total += 1
+
         if item["language"] == "Hindi":
             hindi_total += 1
         else:
             eng_total += 1
 
-        if item["category"] == "youtube":
-            yt_total += 1
-        elif item["category"] == "website":
-            web_total += 1
-
-        # Bucket into today's hourly chart
         h = item["hour_ist"]
         if h in hourly_pos:
             if s == "positive":
@@ -482,7 +587,6 @@ async def get_feed(
             else:
                 hourly_neu[h] += 1
 
-        # District aggregation
         d = item["district"]
         if d not in district_stats:
             district_stats[d] = {"total": 0, "negative": 0, "positive": 0}
@@ -492,7 +596,6 @@ async def get_feed(
         elif s == "positive":
             district_stats[d]["positive"] += 1
 
-        # Department aggregation
         dp = item["department"]
         if dp not in dept_stats:
             dept_stats[dp] = {"total": 0, "negative": 0, "positive": 0}
@@ -507,7 +610,6 @@ async def get_feed(
     pos_pct = round((pos_total / total) * 100, 1)
     neu_pct = round((neu_total / total) * 100, 1)
 
-    # Crisis Score (0 - 100): weighted by % negative + recent 2-hour negative spike
     recent_neg = sum(
         1 for it in deduped
         if it["sentiment"] == "negative" and (now_ist.timestamp() - it["published_ts"]) <= 7200
@@ -528,8 +630,11 @@ async def get_feed(
 
     payload = {
         "updated_at": now_ist.strftime("%d %b %Y, %I:%M:%S %p IST"),
+        "x_status": x_status,
+        "x_message": x_message,
         "stats": {
             "total": len(deduped),
+            "x_count": x_total,
             "positive": pos_total,
             "negative": neg_total,
             "neutral": neu_total,
