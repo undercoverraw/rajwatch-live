@@ -9,6 +9,7 @@
   <style>
     body { background: #070b14; color: #e2e8f0; font-family: system-ui, -apple-system, sans-serif; }
     .glass { background: #0f172a; border: 1px solid #1e293b; }
+    input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
     @keyframes flashNew {
       0% { box-shadow: 0 0 0 2px #ef4444, 0 0 24px rgba(239,68,68,.55); background: #261019; }
       100% { box-shadow: 0 0 0 1px #1e293b; background: #0f172a; }
@@ -22,19 +23,30 @@
   <header class="sticky top-0 z-30 bg-[#0b1222]/95 backdrop-blur border-b border-slate-800 px-4 py-2.5">
     <div class="max-w-[1550px] mx-auto flex flex-wrap items-center justify-between gap-2">
       <div class="flex items-center gap-2.5">
-        <span class="h-3 w-3 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span id="liveDot" class="h-3 w-3 rounded-full bg-emerald-400 animate-pulse"></span>
         <div>
           <h1 class="text-lg font-bold tracking-wide text-white leading-tight">
             RAJWATCH <span class="text-sky-400">LIVE PRO</span>
           </h1>
-          <p class="text-[11px] text-slate-400" id="lastUpdated">Real-Time X, Hindi/English News, Websites &amp; Live TV</p>
+          <p class="text-[11px] text-slate-400" id="lastUpdated">Real-Time X, News, Live TV &amp; Account Analytics</p>
         </div>
       </div>
 
       <div class="flex flex-wrap items-center gap-1.5 text-xs">
+        <!-- Back-Date Selector -->
+        <div class="flex items-center gap-1 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1">
+          <span class="text-[11px] text-amber-300 font-semibold">Date:</span>
+          <input id="datePicker" type="date" onchange="onDateChange()"
+            class="bg-transparent text-white text-xs focus:outline-none cursor-pointer" />
+          <button id="liveResetBtn" onclick="resetToLive()"
+            class="hidden ml-1 px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px]">
+            ● LIVE
+          </button>
+        </div>
+
         <span id="xBadge" class="px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">Connecting...</span>
         <span id="crisisBadge" class="px-2.5 py-1 rounded-full bg-emerald-950/60 text-emerald-300 border border-emerald-600/40 font-bold">Crisis: 0/100</span>
-        <span class="px-2.5 py-1 rounded-full bg-slate-800 text-sky-300 border border-slate-700">
+        <span id="timerPill" class="px-2.5 py-1 rounded-full bg-slate-800 text-sky-300 border border-slate-700">
           Scan: <b id="timer">25</b>s
         </span>
         <button id="soundBtn" onclick="toggleSound()" class="px-2.5 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 font-semibold">
@@ -68,17 +80,26 @@
   </header>
 
   <main class="max-w-[1550px] mx-auto px-4 py-4">
+    <!-- Archive Back-Date Mode Banner -->
+    <div id="archiveBanner" class="hidden mb-3 px-4 py-2.5 rounded-xl bg-amber-500/15 border border-amber-400/50 text-amber-200 text-xs flex flex-wrap items-center justify-between gap-2">
+      <span>📅 <b id="archiveDateText">Back-Date Mode</b> — Is din ke tweets aur news dikh rahe hain (auto-scan paused hai).</span>
+      <button onclick="resetToLive()" class="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold">
+        Return to Live Feed ↗
+      </button>
+    </div>
+
     <div id="xErrorBox" class="hidden mb-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/40 text-amber-200 text-xs"></div>
 
-    <!-- 2-COLUMN WAR ROOM: LEFT = LIVE FEED / LIVE TV | RIGHT = GRAPHS & RADAR -->
+    <!-- 2-COLUMN WAR ROOM: LEFT = FEED / ACCOUNTS / LIVE TV | RIGHT = GRAPHS & RADAR -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
 
-      <!-- LEFT COLUMN (8/12): FILTERS + LIVE FEED -->
+      <!-- LEFT COLUMN (8/12) -->
       <div class="lg:col-span-8 space-y-3">
         <div class="glass rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2">
           <div class="flex flex-wrap gap-1.5 text-xs">
             <button onclick="setSource('ALL')" data-src="ALL" class="src-btn px-2.5 py-1.5 rounded-lg bg-sky-600 text-white font-semibold">All Live</button>
             <button onclick="setSource('X')" data-src="X" class="src-btn px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-200">X (Twitter)</button>
+            <button onclick="setSource('ACCOUNTS')" data-src="ACCOUNTS" class="src-btn px-2.5 py-1.5 rounded-lg bg-amber-500/20 border border-amber-400/50 text-amber-200 font-semibold">Accounts Tracker</button>
             <button onclick="setSource('NEWSPAPER')" data-src="NEWSPAPER" class="src-btn px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-300">Newspapers</button>
             <button onclick="setSource('NEWS')" data-src="NEWS" class="src-btn px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-300">Web News</button>
             <button onclick="setSource('HINDI')" data-src="HINDI" class="src-btn px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-300">Hindi</button>
@@ -90,7 +111,7 @@
           </div>
 
           <div class="flex items-center gap-2">
-            <input id="instantSearch" oninput="renderFeed()" type="text" placeholder="Instant filter posts..."
+            <input id="instantSearch" oninput="renderFeed()" type="text" placeholder="Filter posts / @handle..."
               class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white w-44 focus:outline-none focus:border-sky-500" />
             <span id="postCount" class="text-xs text-slate-400 whitespace-nowrap">0 posts</span>
           </div>
@@ -101,7 +122,48 @@
           <button onclick="clearSubFilters()" class="text-amber-300 font-bold hover:underline">Clear ✕</button>
         </div>
 
-        <!-- LIVE TV WALL (Renders once so streams never reset during 25s scan) -->
+        <!-- ACCOUNT BIFURCATION TAB VIEW -->
+        <div id="accountsView" class="hidden space-y-3">
+          <div class="glass rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div class="flex flex-wrap items-center gap-1.5">
+              <span class="text-slate-400 font-semibold mr-1">Show:</span>
+              <button onclick="setAccSource('ALL')" id="accSrcALL" class="px-2.5 py-1 rounded-lg bg-sky-600 text-white font-semibold">All Accounts</button>
+              <button onclick="setAccSource('X')" id="accSrcX" class="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300">Only X Handles</button>
+              <button onclick="setAccSource('MEDIA')" id="accSrcMEDIA" class="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300">News &amp; TV</button>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-slate-400">Sort by:</span>
+              <select id="accSort" onchange="renderAccounts()" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white focus:outline-none">
+                <option value="total">Total Posts (High → Low)</option>
+                <option value="negative">Most Negative Posts</option>
+                <option value="positive">Most Positive Posts</option>
+              </select>
+              <button onclick="exportAccountsCSV()" class="px-2.5 py-1 rounded-lg bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 font-semibold hover:bg-emerald-600/30">
+                Export Accounts Excel
+              </button>
+            </div>
+          </div>
+
+          <div class="glass rounded-xl overflow-x-auto">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr class="bg-slate-900/90 text-slate-400 uppercase text-[10px] border-b border-slate-800">
+                  <th class="py-2.5 px-3">Account / Handle</th>
+                  <th class="py-2.5 px-2 text-center">Source</th>
+                  <th class="py-2.5 px-2 text-center">Total</th>
+                  <th class="py-2.5 px-2 text-center text-emerald-400">Positive</th>
+                  <th class="py-2.5 px-2 text-center text-red-400">Negative</th>
+                  <th class="py-2.5 px-2 text-center">Neutral</th>
+                  <th class="py-2.5 px-3 w-40">Pos / Neg Ratio</th>
+                  <th class="py-2.5 px-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody id="accountsTableBody" class="divide-y divide-slate-800/80"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- LIVE TV WALL -->
         <div id="liveTvWall" class="hidden grid grid-cols-1 md:grid-cols-2 gap-3"></div>
 
         <!-- LIVE FEED STREAM -->
@@ -110,9 +172,8 @@
         </div>
       </div>
 
-      <!-- RIGHT SIDEBAR (4/12): STICKY FULL-DAY SENTIMENT GRAPHS & RADAR -->
+      <!-- RIGHT SIDEBAR (4/12): STICKY SENTIMENT GRAPHS & RADAR -->
       <aside class="lg:col-span-4 lg:sticky lg:top-28 space-y-3">
-        <!-- Sentiment KPI Counters -->
         <div class="grid grid-cols-3 gap-2">
           <div class="glass rounded-xl p-2.5 border-red-500/30 text-center">
             <div class="text-[10px] text-red-400 font-bold uppercase">Negative</div>
@@ -131,10 +192,9 @@
           </div>
         </div>
 
-        <!-- Full-Day Hourly Sentiment Graph (IST) -->
         <div class="glass rounded-xl p-3">
           <div class="flex items-center justify-between mb-1.5">
-            <h2 class="text-xs font-bold text-white uppercase tracking-wide">Full-Day Govt Sentiment (IST)</h2>
+            <h2 id="chartTitle" class="text-xs font-bold text-white uppercase tracking-wide">Full-Day Govt Sentiment (IST)</h2>
             <span class="text-[10px] text-slate-400">Red=Neg | Green=Pos</span>
           </div>
           <div class="h-48">
@@ -142,7 +202,6 @@
           </div>
         </div>
 
-        <!-- Sentiment Donut Split -->
         <div class="glass rounded-xl p-3">
           <div class="flex items-center justify-between mb-1">
             <h2 class="text-xs font-bold text-white uppercase tracking-wide">Sentiment Ratio</h2>
@@ -153,7 +212,6 @@
           </div>
         </div>
 
-        <!-- District Heat Radar -->
         <div class="glass rounded-xl p-3">
           <div class="flex items-center justify-between mb-2">
             <h3 class="text-xs font-bold uppercase tracking-wide text-amber-400">District Heat Radar</h3>
@@ -162,7 +220,6 @@
           <div id="districtStrip" class="flex flex-wrap gap-1.5"></div>
         </div>
 
-        <!-- Department Radar -->
         <div class="glass rounded-xl p-3">
           <div class="flex items-center justify-between mb-2">
             <h3 class="text-xs font-bold uppercase tracking-wide text-sky-400">Department Radar</h3>
@@ -194,9 +251,12 @@
     let keywords = JSON.parse(localStorage.getItem("rajwatch_kw") || "null") || [...DEFAULT_KEYWORDS];
     let activeKeywordFilter = null;
     let currentSource = "ALL";
-    let sentFilter = null; // null | "negative" | "positive"
+    let accSourceFilter = "ALL"; // ALL | X | MEDIA
+    let sentFilter = null;
     let selectedDistrict = null;
     let selectedDept = null;
+    let selectedAccount = null;
+    let selectedDate = ""; // "" = Live mode, "YYYY-MM-DD" = Back-Date mode
     let soundOn = true;
     let allItems = [];
     let latestPayload = null;
@@ -245,6 +305,26 @@
           new Notification("RajWatch Live Ready", { body: "Naya Rajasthan update aate hi popup milega!" });
         }
       });
+    }
+
+    function onDateChange() {
+      const val = document.getElementById("datePicker").value;
+      const today = latestPayload && latestPayload.today_date ? latestPayload.today_date : "";
+      selectedDate = (val && val !== today) ? val : "";
+      selectedAccount = null;
+      firstLoad = true;
+      seenIds.clear();
+      fetchFeed(true);
+    }
+
+    function resetToLive() {
+      selectedDate = "";
+      document.getElementById("datePicker").value = (latestPayload && latestPayload.today_date) || "";
+      selectedAccount = null;
+      firstLoad = true;
+      seenIds.clear();
+      countdown = 25;
+      fetchFeed(true);
     }
 
     function renderKeywords() {
@@ -299,6 +379,10 @@
           b.className = active
             ? "src-btn px-2.5 py-1.5 rounded-lg bg-rose-600 text-white font-semibold"
             : "src-btn px-2.5 py-1.5 rounded-lg bg-rose-950/70 border border-rose-600/50 text-rose-300 font-semibold";
+        } else if (b.dataset.src === "ACCOUNTS") {
+          b.className = active
+            ? "src-btn px-2.5 py-1.5 rounded-lg bg-amber-500 text-slate-950 font-bold"
+            : "src-btn px-2.5 py-1.5 rounded-lg bg-amber-500/20 border border-amber-400/50 text-amber-200 font-semibold";
         } else {
           b.className = active
             ? "src-btn px-2.5 py-1.5 rounded-lg bg-sky-600 text-white font-semibold"
@@ -306,6 +390,17 @@
         }
       });
       renderFeed();
+    }
+
+    function setAccSource(src) {
+      accSourceFilter = src;
+      ["ALL", "X", "MEDIA"].forEach(k => {
+        const el = document.getElementById(`accSrc${k}`);
+        el.className = (k === src)
+          ? "px-2.5 py-1 rounded-lg bg-sky-600 text-white font-semibold"
+          : "px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300";
+      });
+      renderAccounts();
     }
 
     function toggleSentFilter(mode) {
@@ -319,9 +414,33 @@
       renderFeed();
     }
 
-    function selectDistrict(d) { selectedDistrict = selectedDistrict === d ? null : d; renderRadars(); renderFeed(); }
-    function selectDept(dp) { selectedDept = selectedDept === dp ? null : dp; renderRadars(); renderFeed(); }
-    function clearSubFilters() { selectedDistrict = null; selectedDept = null; renderRadars(); renderFeed(); }
+    function selectDistrict(encoded) {
+      const d = decodeURIComponent(encoded);
+      selectedDistrict = selectedDistrict === d ? null : d;
+      renderRadars();
+      renderFeed();
+    }
+
+    function selectDept(encoded) {
+      const dp = decodeURIComponent(encoded);
+      selectedDept = selectedDept === dp ? null : dp;
+      renderRadars();
+      renderFeed();
+    }
+
+    function viewAccountPosts(encodedAuthor) {
+      selectedAccount = decodeURIComponent(encodedAuthor);
+      renderRadars();
+      setSource("ALL");
+    }
+
+    function clearSubFilters() {
+      selectedDistrict = null;
+      selectedDept = null;
+      selectedAccount = null;
+      renderRadars();
+      renderFeed();
+    }
 
     function timeAgo(ts) {
       const diff = Math.max(1, Math.floor(Date.now() / 1000 - ts));
@@ -342,6 +461,10 @@
     }
 
     function renderCharts(data) {
+      document.getElementById("chartTitle").textContent = data.mode === "archive"
+        ? `Hourly Sentiment (${data.active_date} IST)`
+        : "Full-Day Govt Sentiment (IST)";
+
       const ctx1 = document.getElementById("hourlyChart").getContext("2d");
       if (hourlyChartObj) hourlyChartObj.destroy();
       hourlyChartObj = new Chart(ctx1, {
@@ -389,18 +512,19 @@
       document.getElementById("districtStrip").innerHTML = (latestPayload.districts || []).map(d => {
         const active = selectedDistrict === d.name ? "ring-2 ring-amber-400 bg-amber-500/20" : "bg-slate-800/80";
         const neg = d.negative > 0 ? `<span class="text-red-400 font-bold ml-1">(${d.negative}N)</span>` : "";
-        return `<button onclick="selectDistrict('${esc(d.name)}')" class="px-2 py-1 rounded-md text-[11px] border border-slate-700 text-slate-200 hover:border-amber-400 ${active}">${esc(d.name)}: ${d.total}${neg}</button>`;
+        return `<button onclick="selectDistrict('${encodeURIComponent(d.name)}')" class="px-2 py-1 rounded-md text-[11px] border border-slate-700 text-slate-200 hover:border-amber-400 ${active}">${esc(d.name)}: ${d.total}${neg}</button>`;
       }).join("");
 
       document.getElementById("deptStrip").innerHTML = (latestPayload.departments || []).map(dp => {
         const active = selectedDept === dp.name ? "ring-2 ring-sky-400 bg-sky-500/20" : "bg-slate-800/80";
         const neg = dp.negative > 0 ? `<span class="text-red-400 font-bold ml-1">(${dp.negative}N)</span>` : "";
-        return `<button onclick="selectDept('${esc(dp.name)}')" class="px-2 py-1 rounded-md text-[11px] border border-slate-700 text-slate-200 hover:border-sky-400 ${active}">${esc(dp.name)}: ${dp.total}${neg}</button>`;
+        return `<button onclick="selectDept('${encodeURIComponent(dp.name)}')" class="px-2 py-1 rounded-md text-[11px] border border-slate-700 text-slate-200 hover:border-sky-400 ${active}">${esc(dp.name)}: ${dp.total}${neg}</button>`;
       }).join("");
 
       const bar = document.getElementById("subFilterBar");
-      if (selectedDistrict || selectedDept) {
+      if (selectedDistrict || selectedDept || selectedAccount) {
         const parts = [];
+        if (selectedAccount) parts.push(`Account: ${selectedAccount}`);
         if (selectedDistrict) parts.push(`District: ${selectedDistrict}`);
         if (selectedDept) parts.push(`Dept: ${selectedDept}`);
         document.getElementById("subFilterText").textContent = "Active Filter → " + parts.join(" | ");
@@ -410,9 +534,94 @@
       }
     }
 
+    function renderAccounts() {
+      const tbody = document.getElementById("accountsTableBody");
+      if (!latestPayload || !latestPayload.accounts) {
+        tbody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-slate-400">Loading account data...</td></tr>`;
+        return;
+      }
+
+      const q = document.getElementById("instantSearch").value.trim().toLowerCase();
+      const sortBy = document.getElementById("accSort").value;
+
+      let list = latestPayload.accounts.filter(acc => {
+        if (accSourceFilter === "X" && acc.source !== "X") return false;
+        if (accSourceFilter === "MEDIA" && acc.source === "X") return false;
+        if (sentFilter === "negative" && acc.negative === 0) return false;
+        if (sentFilter === "positive" && acc.positive === 0) return false;
+        if (q && !(acc.author.toLowerCase().includes(q) || acc.source.toLowerCase().includes(q))) return false;
+        return true;
+      });
+
+      list.sort((a, b) => {
+        if (sortBy === "negative") return (b.negative - a.negative) || (b.total - a.total);
+        if (sortBy === "positive") return (b.positive - a.positive) || (b.total - a.total);
+        return (b.total - a.total) || (b.negative - a.negative);
+      });
+
+      document.getElementById("postCount").textContent = `${list.length} accounts`;
+
+      if (!list.length) {
+        tbody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-slate-400">Is filter mein koi account nahi mila.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = list.map(acc => {
+        const srcTag = acc.source === "X"
+          ? `<span class="px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 font-bold text-[10px]">X</span>`
+          : acc.source === "YOUTUBE"
+          ? `<span class="px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30 font-bold text-[10px]">YT</span>`
+          : acc.source === "NEWSPAPER"
+          ? `<span class="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-200 border border-purple-500/30 font-bold text-[10px]">PAPER</span>`
+          : `<span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold text-[10px]">NEWS</span>`;
+
+        const engInfo = acc.source === "X"
+          ? `<div class="text-[10px] text-slate-500 mt-0.5">❤ ${acc.likes} &nbsp; 🔁 ${acc.retweets}</div>`
+          : "";
+
+        return `
+          <tr class="hover:bg-slate-800/50 transition">
+            <td class="py-2.5 px-3">
+              <div class="font-semibold text-slate-100">${esc(acc.author)}</div>
+              ${engInfo}
+            </td>
+            <td class="py-2.5 px-2 text-center">${srcTag}</td>
+            <td class="py-2.5 px-2 text-center font-extrabold text-white">${acc.total}</td>
+            <td class="py-2.5 px-2 text-center font-bold text-emerald-400">${acc.positive} <span class="text-[10px] text-slate-500">(${acc.pos_pct}%)</span></td>
+            <td class="py-2.5 px-2 text-center font-bold text-red-400">${acc.negative} <span class="text-[10px] text-slate-500">(${acc.neg_pct}%)</span></td>
+            <td class="py-2.5 px-2 text-center text-slate-400">${acc.neutral}</td>
+            <td class="py-2.5 px-3">
+              <div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden flex">
+                <div style="width:${acc.pos_pct}%" class="bg-emerald-500" title="Positive ${acc.pos_pct}%"></div>
+                <div style="width:${acc.neg_pct}%" class="bg-red-500" title="Negative ${acc.neg_pct}%"></div>
+                <div style="width:${acc.neu_pct}%" class="bg-slate-600" title="Neutral ${acc.neu_pct}%"></div>
+              </div>
+              <div class="text-[10px] text-slate-400 mt-1">${esc(acc.stance)}</div>
+            </td>
+            <td class="py-2.5 px-3 text-right">
+              <button onclick="viewAccountPosts('${encodeURIComponent(acc.author)}')"
+                class="px-2.5 py-1 rounded-lg bg-sky-600/20 hover:bg-sky-600/40 border border-sky-500/40 text-sky-300 font-semibold text-[11px] whitespace-nowrap">
+                See Posts →
+              </button>
+            </td>
+          </tr>`;
+      }).join("");
+    }
+
     function renderFeed(newIdSet = new Set()) {
       const tvWall = document.getElementById("liveTvWall");
+      const accView = document.getElementById("accountsView");
       const container = document.getElementById("feed");
+
+      if (currentSource === "ACCOUNTS") {
+        container.classList.add("hidden");
+        tvWall.classList.add("hidden");
+        accView.classList.remove("hidden");
+        renderAccounts();
+        return;
+      }
+
+      accView.classList.add("hidden");
 
       if (currentSource === "LIVE_TV") {
         container.classList.add("hidden");
@@ -450,6 +659,7 @@
         if (sentFilter && item.sentiment !== sentFilter) return false;
         if (selectedDistrict && item.district !== selectedDistrict) return false;
         if (selectedDept && item.department !== selectedDept) return false;
+        if (selectedAccount && item.author !== selectedAccount) return false;
         const hay = (item.text + " " + item.author).toLowerCase();
         if (activeKeywordFilter && !hay.includes(activeKeywordFilter.toLowerCase())) return false;
         if (q && !hay.includes(q)) return false;
@@ -458,7 +668,7 @@
 
       document.getElementById("postCount").textContent = `${filtered.length} posts`;
       if (!filtered.length) {
-        container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400 text-sm">Is filter par abhi koi post nahi mili.</div>`;
+        container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400 text-sm">Is date / filter par koi post nahi mili.</div>`;
         return;
       }
 
@@ -495,13 +705,13 @@
                   ${srcBadge} ${sentBadge} ${newBadge}
                   <span class="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300">${esc(item.district)}</span>
                 </div>
-                <span class="text-emerald-300 font-semibold whitespace-nowrap">${timeAgo(item.ts)}</span>
+                <span class="text-emerald-300 font-semibold whitespace-nowrap">${selectedDate ? esc(item.date_label + ", " + item.time_str) : timeAgo(item.ts)}</span>
               </div>
-              <p class="text-xs font-semibold text-sky-300 mb-1">${esc(item.author)}</p>
+              <p class="text-xs font-semibold text-sky-300 mb-1 cursor-pointer hover:underline" onclick="viewAccountPosts('${encodeURIComponent(item.author)}')">${esc(item.author)}</p>
               <p class="text-[13px] text-slate-100 leading-relaxed mb-3 break-words">${highlightText(item.text)}</p>
             </div>
             <div class="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-800/80">
-              <span>${item.source === "X" ? `❤ ${item.likes} &nbsp; 🔁 ${item.retweets}` : esc(item.department)} · ${esc(item.time_str)}</span>
+              <span>${item.source === "X" ? `❤ ${item.likes} &nbsp; 🔁 ${item.retweets}` : esc(item.department)} · ${esc(item.date_label)} ${esc(item.time_str)}</span>
               <a href="${esc(item.url)}" target="_blank" rel="noopener" class="text-sky-400 hover:underline font-semibold">Open ↗</a>
             </div>
           </article>`;
@@ -511,22 +721,23 @@
     function openBriefModal() {
       if (!latestPayload) return;
       const s = latestPayload.stats;
-      const topNeg = allItems.filter(i => i.sentiment === "negative").slice(0, 6);
-      const topPos = allItems.filter(i => i.sentiment === "positive").slice(0, 3);
-      const hotDists = (latestPayload.districts || []).slice(0, 4).map(d => `${d.name} (${d.negative}N)`).join(", ");
+      const topNeg = allItems.filter(i => i.sentiment === "negative").slice(0, 5);
+      const topNegAccs = (latestPayload.accounts || []).filter(a => a.negative > 0).sort((a, b) => b.negative - a.negative).slice(0, 4);
 
-      let text = `📊 *RAJWATCH LIVE PRO — DAILY MEDIA & X BRIEF*\n`;
+      let text = `📊 *RAJWATCH PRO — MEDIA & X BRIEF (${latestPayload.active_date})*\n`;
       text += `🕒 Updated: ${latestPayload.updated_at}\n`;
       text += `🚨 Crisis Score: ${s.crisis_score}/100\n\n`;
-      text += `📈 *SENTIMENT (Total ${s.total} | X: ${s.x_count} | News: ${s.news_count} | YT: ${s.yt_count})*\n`;
+      text += `📈 *SENTIMENT (Total ${s.total} | X: ${s.x_count} | News: ${s.news_count})*\n`;
       text += `🔴 Negative: ${s.negative} (${s.negative_pct}%)\n`;
       text += `🟢 Positive: ${s.positive} (${s.positive_pct}%)\n`;
-      text += `⚪ Neutral: ${s.neutral} (${s.neutral_pct}%)\n`;
-      text += `📍 Hotspots: ${hotDists}\n\n`;
+      text += `⚪ Neutral: ${s.neutral} (${s.neutral_pct}%)\n\n`;
+      if (topNegAccs.length) {
+        text += `👤 *TOP NEGATIVE ACCOUNTS:*\n`;
+        topNegAccs.forEach((a, i) => { text += `${i + 1}. ${a.author} — ${a.total} posts (${a.negative} Neg / ${a.positive} Pos)\n`; });
+        text += `\n`;
+      }
       text += `🚨 *TOP NEGATIVE ALERTS:*\n`;
-      topNeg.forEach((n, i) => { text += `${i + 1}. [${n.source} | ${timeAgo(n.ts)} | ${n.author}] ${n.text.slice(0, 140)}\n`; });
-      text += `\n✅ *TOP POSITIVE COVERAGE:*\n`;
-      topPos.forEach((p, i) => { text += `${i + 1}. [${p.author}] ${p.text.slice(0, 140)}\n`; });
+      topNeg.forEach((n, i) => { text += `${i + 1}. [${n.source} | ${n.author}] ${n.text.slice(0, 140)}\n`; });
 
       document.getElementById("briefText").value = text;
       document.getElementById("briefModal").classList.remove("hidden");
@@ -542,10 +753,10 @@
 
     function exportCSV() {
       if (!allItems.length) return;
-      let csv = "\uFEFFTime (IST),Source,Author,Language,Sentiment,District,Department,Text,Link\n";
+      let csv = "\uFEFFDate,Time (IST),Source,Author,Language,Sentiment,District,Department,Text,Link\n";
       allItems.forEach(i => {
         const row = [
-          i.time_str, i.source, i.author, i.language, i.sentiment,
+          i.date_ist, i.time_str, i.source, i.author, i.language, i.sentiment,
           i.district, i.department, i.text.replace(/"/g, '""'), i.url
         ].map(v => `"${v}"`).join(",");
         csv += row + "\n";
@@ -553,19 +764,57 @@
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = `RajWatch_Live_Report_${new Date().toISOString().slice(0,10)}.csv`;
+      link.download = `RajWatch_Feed_${(latestPayload && latestPayload.active_date) || "report"}.csv`;
+      link.click();
+    }
+
+    function exportAccountsCSV() {
+      if (!latestPayload || !latestPayload.accounts) return;
+      let csv = "\uFEFFAccount,Source,Total Posts,Positive,Positive %,Negative,Negative %,Neutral,Stance,Likes,Retweets\n";
+      latestPayload.accounts.forEach(a => {
+        const row = [
+          a.author, a.source, a.total, a.positive, a.pos_pct,
+          a.negative, a.neg_pct, a.neutral, a.stance, a.likes, a.retweets
+        ].map(v => `"${v}"`).join(",");
+        csv += row + "\n";
+      });
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `RajWatch_Accounts_Bifurcation_${latestPayload.active_date}.csv`;
       link.click();
     }
 
     async function fetchFeed(force = false) {
       countdown = 25;
       try {
-        const res = await fetch(`/api/feed?keywords=${encodeURIComponent(keywords.join(","))}&force=${force}`);
+        const dateParam = selectedDate ? `&date=${encodeURIComponent(selectedDate)}` : "";
+        const res = await fetch(`/api/feed?keywords=${encodeURIComponent(keywords.join(","))}&force=${force}${dateParam}`);
         const data = await res.json();
         latestPayload = data;
         const s = data.stats;
 
-        document.getElementById("lastUpdated").textContent = `Updated: ${data.updated_at}`;
+        // Set date picker max date to today & sync value
+        const dp = document.getElementById("datePicker");
+        if (data.today_date) dp.max = data.today_date;
+        if (!dp.value && data.active_date) dp.value = data.active_date;
+
+        // Toggle Live vs Archive UI
+        const isArchive = data.mode === "archive";
+        document.getElementById("archiveBanner").classList.toggle("hidden", !isArchive);
+        document.getElementById("liveResetBtn").classList.toggle("hidden", !isArchive);
+        document.getElementById("timerPill").classList.toggle("hidden", isArchive);
+        document.getElementById("liveDot").className = isArchive
+          ? "h-3 w-3 rounded-full bg-amber-400"
+          : "h-3 w-3 rounded-full bg-emerald-400 animate-pulse";
+        if (isArchive) {
+          document.getElementById("archiveDateText").textContent = `Archive Date: ${data.active_date}`;
+        }
+
+        document.getElementById("lastUpdated").textContent = isArchive
+          ? `Showing Archive: ${data.active_date} (Updated ${data.updated_at})`
+          : `Updated: ${data.updated_at}`;
+
         document.getElementById("kpiNeg").textContent = s.negative;
         document.getElementById("kpiNegPct").textContent = `${s.negative_pct}%`;
         document.getElementById("kpiPos").textContent = s.positive;
@@ -577,7 +826,7 @@
         const xBadge = document.getElementById("xBadge");
         const xErr = document.getElementById("xErrorBox");
         if (data.x_status.startsWith("live")) {
-          xBadge.textContent = `X: ${data.x_status.toUpperCase()}`;
+          xBadge.textContent = isArchive ? `X: ARCHIVE (${s.x_count})` : `X: ${data.x_status.toUpperCase()}`;
           xBadge.className = "px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold";
           xErr.classList.add("hidden");
         } else {
@@ -605,7 +854,7 @@
         data.items.forEach(item => {
           if (!seenIds.has(item.id)) {
             seenIds.add(item.id);
-            if (!firstLoad) {
+            if (!firstLoad && !isArchive) {
               newIds.add(item.id);
               if (!newestItem) newestItem = item;
               if (item.sentiment === "negative") hasAlert = true;
@@ -618,7 +867,7 @@
         renderRadars();
         renderFeed(newIds);
 
-        if (!firstLoad && newIds.size > 0) {
+        if (!firstLoad && !isArchive && newIds.size > 0) {
           playBeep(hasAlert);
           if ("Notification" in window && Notification.permission === "granted" && newestItem) {
             new Notification(`${newestItem.source} Update (${newestItem.author})`, { body: newestItem.text.slice(0, 120) });
@@ -633,6 +882,7 @@
     renderKeywords();
     fetchFeed(false);
     setInterval(() => {
+      if (selectedDate) return; // Pause auto-scan in Back-Date mode
       countdown--;
       if (countdown <= 0) fetchFeed(false);
       document.getElementById("timer").textContent = countdown;
