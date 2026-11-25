@@ -26,8 +26,13 @@ HEADERS = {
     ),
     "Accept-Language": "hi-IN,hi;q=0.9,en-IN;q=0.8,en;q=0.7",
 }
+YT_LIVE_HEADERS = {
+    "User-Agent": HEADERS["User-Agent"],
+    "Accept-Language": "en-US,en;q=0.9",
+    "Cookie": "CONSENT=YES+cb; SOCS=CAI",
+}
 
-# Verified Rajasthan News YouTube Channel RSS Feeds (Exact timestamps + Live TV Wall)
+# Verified Rajasthan News YouTube Channel RSS Feeds
 YOUTUBE_CHANNELS = [
     ("First India News", "UC_cZYFovNQTsKw1ZLmO_AMA"),
     ("Zee Rajasthan", "UCfnvGSUXKIuaCv-9E9a2UJg"),
@@ -137,7 +142,7 @@ DEPARTMENTS = {
     ],
 }
 
-# Cookie pool loader (exact working version, supports up to 3 backup X accounts)
+
 def get_cookie_pool():
     pool = []
     suffixes = ["", "_2", "_3"]
@@ -151,9 +156,8 @@ def get_cookie_pool():
 
 x_cache = {"query": "", "ts": 0.0, "items": [], "status": "idle", "error": ""}
 cookie_turn = 0
-
-# Full-day rolling memory so today's hourly sentiment graph accumulates cleanly
 DAILY_TRACKER: Dict[str, Any] = {"date": "", "items": {}}
+LIVE_TV_CACHE: Dict[str, Any] = {"ts": 0.0, "streams": []}
 
 
 def clean_text(raw: str) -> str:
@@ -238,7 +242,7 @@ def enrich_item(item: Dict[str, Any]) -> Dict[str, Any]:
     return item
 
 
-# EXACT WORKING X FETCHER (using twifork) — Untouched core logic
+# EXACT WORKING X FETCHER (using twifork) — Untouched
 async def fetch_x_tweets(keywords: list[str], force: bool = False):
     global cookie_turn
     pool = get_cookie_pool()
@@ -289,7 +293,6 @@ async def fetch_x_tweets(keywords: list[str], force: bool = False):
         return x_cache["items"], "warning", f"X temporary error: {err_msg}"
 
 
-# English + Hindi Google News RSS (Exact timestamps)
 async def fetch_google_news(http: httpx.AsyncClient, keywords: list[str], lang: str = "en"):
     top_kw = [k.strip() for k in keywords if k.strip()][:5]
     if not top_kw:
@@ -327,7 +330,6 @@ async def fetch_google_news(http: httpx.AsyncClient, keywords: list[str], lang: 
     return items
 
 
-# Direct Rajasthan Newspapers RSS (Bhaskar, Patrika, Zee)
 async def fetch_newspaper_feeds(http: httpx.AsyncClient):
     async def get_paper(name: str, feed_url: str):
         out = []
@@ -358,7 +360,6 @@ async def fetch_newspaper_feeds(http: httpx.AsyncClient):
     return [it for b in batches for it in b]
 
 
-# Official YouTube Channel XML Feeds (Exact timestamps)
 async def fetch_youtube_feeds(http: httpx.AsyncClient):
     async def get_ch(ch_name: str, ch_id: str):
         out = []
@@ -370,8 +371,10 @@ async def fetch_youtube_feeds(http: httpx.AsyncClient):
                 title = entry.get("title", "")
                 link = entry.get("link", "")
                 pub = entry.get("published") or entry.get("updated") or ""
+                vid = str(entry.get("yt_videoid", "") or "")
                 out.append(enrich_item({
-                    "id": f"yt_{entry.get('yt_videoid', abs(hash(link)))}",
+                    "id": f"yt_{vid or abs(hash(link))}",
+                    "video_id": vid,
                     "source": "YOUTUBE",
                     "author": ch_name,
                     "text": title,
@@ -386,6 +389,67 @@ async def fetch_youtube_feeds(http: httpx.AsyncClient):
 
     batches = await asyncio.gather(*(get_ch(n, cid) for n, cid in YOUTUBE_CHANNELS))
     return [it for b in batches for it in b]
+
+
+# Resolves exact active Live Video ID per channel (fixes "This video is unavailable")
+async def resolve_live_tv(http: httpx.AsyncClient, yt_items: List[Dict[str, Any]], force: bool = False):
+    now = time.time()
+    ttl = 60 if force else 600
+    if LIVE_TV_CACHE["streams"] and (now - LIVE_TV_CACHE["ts"]) < ttl:
+        return LIVE_TV_CACHE["streams"]
+
+    async def get_live_stream(ch_name: str, cid: str):
+        vid = None
+        # Method 1: Check channel's /live page for exact canonical watch?v= video ID
+        try:
+            r = await http.get(f"https://www.youtube.com/channel/{cid}/live", headers=YT_LIVE_HEADERS, timeout=7.0)
+            m = re.search(r'<link rel="canonical" href="https://www\.youtube\.com/watch\?v=([A-Za-z0-9_-]{11})"', r.text)
+            if m:
+                vid = m.group(1)
+            else:
+                m2 = re.search(r'"videoId":"([A-Za-z0-9_-]{11})"[^}]{0,300}"isLive":true', r.text)
+                if m2:
+                    vid = m2.group(1)
+        except Exception:
+            pass
+
+        # Method 2: Check channel's /streams tab for active live stream ID
+        if not vid:
+            try:
+                r2 = await http.get(f"https://www.youtube.com/channel/{cid}/streams", headers=YT_LIVE_HEADERS, timeout=7.0)
+                m_live = re.search(r'"videoId":"([A-Za-z0-9_-]{11})".{0,1800}?"style":"LIVE"', r2.text)
+                if m_live:
+                    vid = m_live.group(1)
+                else:
+                    m_any = re.search(r'"videoId":"([A-Za-z0-9_-]{11})"', r2.text)
+                    if m_any:
+                        vid = m_any.group(1)
+            except Exception:
+                pass
+
+        # Method 3: Guaranteed fallback to latest video from this channel's XML feed
+        if not vid:
+            for item in yt_items:
+                if item.get("author") == ch_name and len(item.get("video_id", "")) == 11:
+                    vid = item["video_id"]
+                    break
+
+        if vid:
+            return {
+                "source": ch_name,
+                "title": f"{ch_name} — Live Rajasthan TV",
+                "embed_url": f"https://www.youtube.com/embed/{vid}?mute=1&rel=0",
+            }
+        return {
+            "source": ch_name,
+            "title": f"{ch_name} — Live Rajasthan TV",
+            "embed_url": f"https://www.youtube.com/embed/live_stream?channel={cid}&mute=1",
+        }
+
+    streams = await asyncio.gather(*(get_live_stream(n, cid) for n, cid in YOUTUBE_CHANNELS))
+    LIVE_TV_CACHE["ts"] = now
+    LIVE_TV_CACHE["streams"] = list(streams)
+    return LIVE_TV_CACHE["streams"]
 
 
 @app.get("/")
@@ -408,11 +472,11 @@ async def api_feed(
             fetch_newspaper_feeds(http),
             fetch_youtube_feeds(http),
         )
+        live_tv = await resolve_live_tv(http, yt_items, force=force)
 
     x_items, x_status, x_error = x_res
     raw_items = x_items + news_hi + news_en + papers + yt_items
 
-    # Deduplicate & sort strictly newest first
     now_ist = datetime.now(IST)
     today_str = now_ist.strftime("%Y-%m-%d")
     cutoff = now_ist.timestamp() - 86400
@@ -428,7 +492,6 @@ async def api_feed(
         seen_keys.add(k)
         deduped.append(it)
 
-    # Update rolling full-day tracker (resets at midnight IST)
     if DAILY_TRACKER["date"] != today_str:
         DAILY_TRACKER["date"] = today_str
         DAILY_TRACKER["items"] = {}
@@ -442,7 +505,6 @@ async def api_feed(
         for old_k in list(DAILY_TRACKER["items"].keys())[:200]:
             DAILY_TRACKER["items"].pop(old_k, None)
 
-    # Hourly Full-Day IST Graph (00:00 to current IST hour)
     hours_range = list(range(0, now_ist.hour + 1))
     h_pos = {h: 0 for h in hours_range}
     h_neg = {h: 0 for h in hours_range}
@@ -457,7 +519,6 @@ async def api_feed(
             else:
                 h_neu[h] += 1
 
-    # Stats, Districts, Departments
     pos_total = neg_total = neu_total = 0
     x_total = hi_total = en_total = yt_total = np_total = 0
     district_stats: Dict[str, Dict[str, int]] = {}
@@ -507,15 +568,6 @@ async def api_feed(
     neu_pct = round((neu_total / total) * 100, 1)
     recent_neg = sum(1 for it in deduped if it["sentiment"] == "negative" and (now_ist.timestamp() - it["ts"]) <= 7200)
     crisis_score = min(100, int((neg_pct * 1.3) + (recent_neg * 4)))
-
-    live_tv = [
-        {
-            "source": name,
-            "title": f"{name} — 24x7 Live Rajasthan TV",
-            "embed_url": f"https://www.youtube.com/embed/live_stream?channel={cid}&mute=1",
-        }
-        for name, cid in YOUTUBE_CHANNELS
-    ]
 
     return {
         "server_time": time.time(),
