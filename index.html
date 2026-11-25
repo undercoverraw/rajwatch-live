@@ -1,92 +1,516 @@
-(function () {
-  const isRajWatchTab = window.location.search.includes("rajwatch=1") || localStorage.getItem("rw_auto_stream") === "1";
-  if (window.location.search.includes("rajwatch=1")) {
-    localStorage.setItem("rw_auto_stream", "1");
-  }
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RAJWATCH 𝕏 LIVE | Real-Time X Radar & Sentiment War Room</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { background: #050a14; color: #e2e8f0; font-family: system-ui, -apple-system, sans-serif; }
+    .glass { background: rgba(15, 23, 42, 0.88); border: 1px solid rgba(51, 65, 85, 0.72); }
+    .pulse-dot { animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+  </style>
+</head>
+<body class="min-h-screen pb-10">
 
-  // Screen ke bottom-right mein chhota sa live status badge
-  const badge = document.createElement("div");
-  badge.style.cssText =
-    "position:fixed;bottom:16px;right:16px;z-index:99999;background:#0f172a;color:#34d399;" +
-    "border:2px solid #10b981;padding:8px 14px;border-radius:10px;font:bold 12px system-ui;" +
-    "box-shadow:0 4px 20px rgba(0,0,0,0.5);cursor:pointer;";
-  badge.textContent = "RajWatch 𝕏 Bridge: Starting...";
-  document.body.appendChild(badge);
+  <header class="sticky top-0 z-40 bg-[#050a14]/95 backdrop-blur border-b border-slate-800 px-4 py-2.5">
+    <div class="max-w-[1550px] mx-auto flex flex-wrap items-center justify-between gap-2">
+      <div class="flex items-center gap-2.5">
+        <span class="w-3 h-3 rounded-full bg-emerald-400 pulse-dot"></span>
+        <div>
+          <h1 class="text-lg font-extrabold tracking-wide text-white leading-tight">
+            RAJWATCH <span class="text-sky-400">𝕏 LIVE</span>
+            <span class="text-[10px] font-bold ml-1.5 px-2 py-0.5 rounded bg-black text-white border border-slate-600">REAL-TIME PUBLIC RADAR</span>
+          </h1>
+          <p class="text-[11px] text-slate-400" id="lastUpdated">Connecting...</p>
+        </div>
+      </div>
 
-  let streaming = isRajWatchTab;
-  badge.onclick = () => {
-    streaming = !streaming;
-    localStorage.setItem("rw_auto_stream", streaming ? "1" : "0");
-    badge.style.borderColor = streaming ? "#10b981" : "#f59e0b";
-    badge.style.color = streaming ? "#34d399" : "#fcd34d";
-    badge.textContent = streaming ? "RajWatch 𝕏 Bridge: ON" : "RajWatch 𝕏 Bridge: PAUSED (Click to ON)";
-  };
+      <div class="flex flex-wrap items-center gap-2">
+        <div id="xStatusBadge" class="px-2.5 py-1.5 rounded-lg text-xs font-bold border bg-amber-950/60 border-amber-500/40 text-amber-300">
+          𝕏: Waiting for Live Tab...
+        </div>
 
-  function grabCount(article, testId) {
-    const el = article.querySelector(`[data-testid="${testId}"]`);
-    if (!el) return "0";
-    const txt = (el.innerText || "").trim();
-    return txt || "0";
-  }
+        <button onclick="openLiveXSearch()" class="px-3 py-1.5 rounded-lg text-xs font-extrabold bg-white text-black hover:bg-slate-200">
+          ▶ Start Live 𝕏 Stream Tab ↗
+        </button>
 
-  function scrapeAndPush() {
-    if (!streaming) return;
-    const articles = document.querySelectorAll('article[data-testid="tweet"]');
-    const tweets = [];
+        <div id="crisisBadge" class="px-2.5 py-1.5 rounded-lg text-xs font-bold border bg-emerald-950/60 border-emerald-600/40 text-emerald-300">
+          Crisis: 0/100
+        </div>
 
-    articles.forEach(art => {
+        <button onclick="toggleSound()" id="soundBtn" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-900/50 border border-emerald-600/50 text-emerald-300">
+          Sound: ON
+        </button>
+
+        <button onclick="openBriefModal()" class="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-amber-500/20 border border-amber-400/50 text-amber-300">
+          WhatsApp Brief
+        </button>
+
+        <button onclick="exportCSV()" class="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-indigo-500/20 border border-indigo-400/50 text-indigo-300">
+          Excel Report
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-[1550px] mx-auto px-4 mt-3 space-y-3">
+
+    <!-- KEYWORDS STRIP -->
+    <section class="glass rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2">
+      <div class="flex flex-wrap items-center gap-1.5" id="keywordChips">
+        <span class="text-xs font-bold text-amber-400 uppercase tracking-wider mr-1">Track Keywords:</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <input id="newKeyword" type="text" placeholder="Add keyword (e.g. RPSC, JDA)..."
+          class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-sky-400 w-48"
+          onkeydown="if(event.key==='Enter') addKeyword()" />
+        <button onclick="addKeyword()" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950">+ Add</button>
+      </div>
+    </section>
+
+    <!-- SETUP HELPER BANNER (Auto-hides as soon as tweets start streaming!) -->
+    <div id="waitingBanner" class="hidden glass rounded-xl p-4 border-amber-500/50 bg-amber-950/20 flex flex-wrap items-center justify-between gap-3">
+      <div class="space-y-1">
+        <div class="text-sm font-bold text-amber-300">Live 𝕏 Stream shuru karne ke liye bas 1 click karein:</div>
+        <p class="text-xs text-slate-300">
+          Chrome Extension load karne ke baad upar <b>"▶ Start Live 𝕏 Stream Tab"</b> button dabao. Wo <b>x.com</b> kholega aur har 10 second mein asli public tweets seedha yahan bhejta rahega (tab ko background mein khula chhod do).
+        </p>
+      </div>
+      <button onclick="openLiveXSearch()" class="px-4 py-2 rounded-lg text-xs font-extrabold bg-amber-400 text-slate-950 hover:bg-amber-300">
+        Open 𝕏 Live Tab Now ↗
+      </button>
+    </div>
+
+    <!-- MAIN 2-COLUMN LAYOUT: LEFT = LIVE X FEED | RIGHT = GRAPHS & RADAR -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+
+      <!-- LEFT COLUMN (8/12): PURE LIVE X FEED -->
+      <div class="lg:col-span-8 space-y-3">
+        <div class="glass rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2">
+          <div class="flex flex-wrap items-center gap-1.5" id="tabs">
+            <button onclick="setTab('all')" data-tab="all" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-500 text-slate-950">All Live 𝕏</button>
+            <button onclick="setTab('negative')" data-tab="negative" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-red-950/70 text-red-300 border border-red-600/40">Negative / Against Govt</button>
+            <button onclick="setTab('positive')" data-tab="positive" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-950/70 text-emerald-300 border border-emerald-600/40">Positive / Pro Govt</button>
+            <button onclick="setTab('hindi')" data-tab="hindi" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 text-slate-300">Hindi Tweets</button>
+            <button onclick="setTab('english')" data-tab="english" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 text-slate-300">English Tweets</button>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <input id="searchBox" type="text" placeholder="Search tweet / @handle..."
+              oninput="renderFeed()"
+              class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-sky-400 w-44" />
+            <span id="postCount" class="text-xs text-slate-400 font-semibold whitespace-nowrap">0 tweets</span>
+          </div>
+        </div>
+
+        <div id="activeFilterBar" class="hidden flex items-center justify-between bg-sky-950/40 border border-sky-500/30 rounded-lg px-3 py-1.5 text-xs text-sky-200">
+          <span id="activeFilterText"></span>
+          <button onclick="clearSubFilters()" class="text-amber-300 font-bold hover:underline">Clear Filter ✕</button>
+        </div>
+
+        <section id="feedGrid" class="grid grid-cols-1 md:grid-cols-2 gap-3"></section>
+      </div>
+
+      <!-- RIGHT SIDEBAR (4/12): STICKY GRAPHS + VOICES + RADARS -->
+      <aside class="lg:col-span-4 lg:sticky lg:top-16 space-y-3">
+        <div class="grid grid-cols-3 gap-2">
+          <div class="glass rounded-xl p-2.5 border-red-500/30 text-center">
+            <div class="text-[10px] text-red-400 font-bold uppercase">Negative</div>
+            <div class="text-lg font-extrabold text-red-400" id="kpiNeg">0</div>
+            <div class="text-[10px] text-slate-400" id="kpiNegPct">0%</div>
+          </div>
+          <div class="glass rounded-xl p-2.5 border-emerald-500/30 text-center">
+            <div class="text-[10px] text-emerald-400 font-bold uppercase">Positive</div>
+            <div class="text-lg font-extrabold text-emerald-400" id="kpiPos">0</div>
+            <div class="text-[10px] text-slate-400" id="kpiPosPct">0%</div>
+          </div>
+          <div class="glass rounded-xl p-2.5 text-center">
+            <div class="text-[10px] text-slate-400 font-bold uppercase">Total 𝕏</div>
+            <div class="text-lg font-extrabold text-white" id="kpiTotal">0</div>
+            <div class="text-[10px] text-sky-400" id="kpiLang">0 HI / 0 EN</div>
+          </div>
+        </div>
+
+        <div class="glass rounded-xl p-3">
+          <div class="flex items-center justify-between mb-1.5">
+            <h2 class="text-xs font-bold text-white uppercase tracking-wide">Full-Day 𝕏 Sentiment Graph (IST)</h2>
+            <span class="text-[10px] text-slate-400">Red=Neg | Green=Pos</span>
+          </div>
+          <div class="h-48">
+            <canvas id="hourlyChart"></canvas>
+          </div>
+        </div>
+
+        <div class="glass rounded-xl p-3">
+          <h2 class="text-xs font-bold text-white uppercase tracking-wide mb-1">Overall Govt Sentiment Split</h2>
+          <div class="h-36 flex items-center justify-center">
+            <canvas id="donutChart"></canvas>
+          </div>
+        </div>
+
+        <div class="glass rounded-xl p-3">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-bold uppercase tracking-wide text-rose-400">Kaun Sabse Zyada Bol Raha Hai</h3>
+            <span class="text-[10px] text-slate-400">Top 𝕏 Handles</span>
+          </div>
+          <div id="voicesStrip" class="flex flex-wrap gap-1.5"></div>
+        </div>
+
+        <div class="glass rounded-xl p-3">
+          <h3 class="text-xs font-bold uppercase tracking-wide text-amber-400 mb-2">District Heat Radar</h3>
+          <div id="districtStrip" class="flex flex-wrap gap-1.5"></div>
+        </div>
+
+        <div class="glass rounded-xl p-3">
+          <h3 class="text-xs font-bold uppercase tracking-wide text-sky-400 mb-2">Department Radar</h3>
+          <div id="deptStrip" class="flex flex-wrap gap-1.5"></div>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <div id="briefModal" class="fixed inset-0 z-50 hidden bg-black/75 flex items-center justify-center p-4">
+    <div class="glass rounded-2xl max-w-2xl w-full p-5 space-y-3">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-amber-400">1-Click CMO / Manager WhatsApp Brief (𝕏 Live)</h3>
+        <button onclick="closeBriefModal()" class="text-slate-400 hover:text-white text-sm font-bold">✕ Close</button>
+      </div>
+      <textarea id="briefText" rows="13" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-slate-200 font-mono focus:outline-none"></textarea>
+      <div class="flex justify-end gap-2">
+        <button onclick="copyBrief()" class="px-4 py-2 rounded-lg text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950">Copy for WhatsApp</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let keywords = JSON.parse(localStorage.getItem("rw_x_keywords") || '["Bhajanlal","RajCMO","Rajasthan govt","Jaipur","RPSC","paper leak","Jila Pramukh"]');
+    let latestData = null;
+    let currentTab = "all";
+    let selectedDistrict = null;
+    let selectedDept = null;
+    let selectedHandle = null;
+    let soundOn = true;
+    let prevNegCount = 0;
+    let hourlyChartObj = null;
+    let donutChartObj = null;
+
+    function esc(str) {
+      return String(str || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function openLiveXSearch() {
+      const q = "(" + keywords.map(k => k.includes(" ") ? `"${k}"` : k).join(" OR ") + ") -filter:retweets";
+      const url = `https://x.com/search?q=${encodeURIComponent(q)}&src=typed_query&f=live&rajwatch=1`;
+      window.open(url, "_blank");
+    }
+
+    function playBeep() {
+      if (!soundOn) return;
       try {
-        const timeEl = art.querySelector("time");
-        if (!timeEl) return;
-        const linkEl = timeEl.closest("a");
-        if (!linkEl) return;
-        const href = linkEl.getAttribute("href") || "";
-        const m = href.match(/^\/([^/]+)\/status\/(\d+)/);
-        if (!m) return;
-
-        const handle = m[1];
-        const id = m[2];
-        const textEl = art.querySelector('[data-testid="tweetText"]');
-        const text = textEl ? textEl.innerText.trim() : "";
-        if (!text) return;
-
-        const nameEl = art.querySelector('[data-testid="User-Name"] span');
-        const name = nameEl ? nameEl.innerText.trim() : handle;
-
-        tweets.push({
-          id,
-          handle,
-          name,
-          text,
-          url: `https://x.com/${handle}/status/${id}`,
-          created_at: timeEl.getAttribute("datetime") || new Date().toISOString(),
-          likes: grabCount(art, "like"),
-          retweets: grabCount(art, "retweet"),
-          replies: grabCount(art, "reply")
-        });
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = 880;
+        gain.gain.value = 0.08;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        setTimeout(() => osc.stop(), 200);
       } catch (e) {}
-    });
+    }
 
-    if (tweets.length > 0) {
-      chrome.runtime.sendMessage(
-        { type: "PUSH_TWEETS", tweets, query: window.location.search },
-        res => {
-          if (chrome.runtime.lastError || !res || !res.ok) {
-            badge.textContent = "RajWatch 𝕏 Bridge: Render waking up...";
-          } else {
-            badge.textContent = `● RajWatch 𝕏 LIVE (${res.data.total_stored} tweets synced)`;
+    function toggleSound() {
+      soundOn = !soundOn;
+      const btn = document.getElementById("soundBtn");
+      btn.textContent = soundOn ? "Sound: ON" : "Sound: OFF";
+      btn.className = soundOn
+        ? "px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-900/50 border border-emerald-600/50 text-emerald-300"
+        : "px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 border border-slate-700 text-slate-400";
+    }
+
+    function renderKeywords() {
+      const box = document.getElementById("keywordChips");
+      box.innerHTML = `<span class="text-xs font-bold text-amber-400 uppercase tracking-wider mr-1">Track Keywords:</span>`;
+      keywords.forEach((kw, i) => {
+        const chip = document.createElement("span");
+        chip.className = "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs bg-slate-800 border border-slate-700 text-slate-200";
+        chip.innerHTML = `${esc(kw)} <button onclick="removeKeyword(${i})" class="text-slate-400 hover:text-red-400 font-bold">×</button>`;
+        box.appendChild(chip);
+      });
+    }
+
+    function addKeyword() {
+      const inp = document.getElementById("newKeyword");
+      const val = inp.value.trim();
+      if (val && !keywords.includes(val)) {
+        keywords.push(val);
+        localStorage.setItem("rw_x_keywords", JSON.stringify(keywords));
+        renderKeywords();
+      }
+      inp.value = "";
+    }
+
+    function removeKeyword(idx) {
+      keywords.splice(idx, 1);
+      localStorage.setItem("rw_x_keywords", JSON.stringify(keywords));
+      renderKeywords();
+    }
+
+    function setTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll(".tab-btn").forEach(btn => {
+        if (btn.dataset.tab === tab) btn.classList.add("ring-2", "ring-sky-400");
+        else btn.classList.remove("ring-2", "ring-sky-400");
+      });
+      renderFeed();
+    }
+
+    function selectDistrict(d) { selectedDistrict = selectedDistrict === d ? null : d; renderRadars(); renderFeed(); }
+    function selectDept(dp) { selectedDept = selectedDept === dp ? null : dp; renderRadars(); renderFeed(); }
+    function selectHandle(h) { selectedHandle = selectedHandle === h ? null : h; renderRadars(); renderFeed(); }
+    function clearSubFilters() { selectedDistrict = null; selectedDept = null; selectedHandle = null; renderRadars(); renderFeed(); }
+
+    function renderCharts(data) {
+      const ctx1 = document.getElementById("hourlyChart").getContext("2d");
+      if (hourlyChartObj) hourlyChartObj.destroy();
+      hourlyChartObj = new Chart(ctx1, {
+        type: "line",
+        data: {
+          labels: data.hourly_chart.labels,
+          datasets: [
+            { label: "Negative", data: data.hourly_chart.negative, borderColor: "#f87171", backgroundColor: "rgba(248,113,113,0.18)", fill: true, tension: 0.35, borderWidth: 2 },
+            { label: "Positive", data: data.hourly_chart.positive, borderColor: "#34d399", backgroundColor: "rgba(52,211,153,0.14)", fill: true, tension: 0.35, borderWidth: 2 },
+            { label: "Neutral", data: data.hourly_chart.neutral, borderColor: "#94a3b8", borderDash: [3, 3], tension: 0.35, borderWidth: 1.3 }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: "#cbd5e1", font: { size: 10 }, boxWidth: 10 } } },
+          scales: {
+            x: { ticks: { color: "#94a3b8", font: { size: 9 } }, grid: { color: "rgba(51,65,85,0.25)" } },
+            y: { beginAtZero: true, ticks: { color: "#94a3b8", font: { size: 9 }, precision: 0 }, grid: { color: "rgba(51,65,85,0.25)" } }
           }
         }
-      );
+      });
+
+      const ctx2 = document.getElementById("donutChart").getContext("2d");
+      if (donutChartObj) donutChartObj.destroy();
+      donutChartObj = new Chart(ctx2, {
+        type: "doughnut",
+        data: {
+          labels: ["Negative", "Positive", "Neutral"],
+          datasets: [{ data: [data.stats.negative, data.stats.positive, data.stats.neutral], backgroundColor: ["#ef4444", "#10b981", "#64748b"], borderWidth: 0 }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: "62%",
+          plugins: { legend: { position: "right", labels: { color: "#cbd5e1", font: { size: 10 }, boxWidth: 10 } } }
+        }
+      });
     }
-  }
 
-  // Har 6 second mein tweets scan karke Render par bhejo
-  setInterval(scrapeAndPush, 6000);
-  setTimeout(scrapeAndPush, 2500);
+    function renderRadars() {
+      if (!latestData) return;
 
-  // Har 45 second mein page auto-refresh taaki ekdum naye live tweets aate rahein
-  setInterval(() => {
-    if (streaming) window.location.reload();
-  }, 45000);
-})();
+      document.getElementById("voicesStrip").innerHTML = (latestData.top_voices || []).map(v => {
+        const active = selectedHandle === v.handle ? "ring-2 ring-rose-400 bg-rose-500/20" : "bg-slate-800/80";
+        const neg = v.negative > 0 ? `<span class="text-red-400 font-bold ml-1">(${v.negative}N)</span>` : "";
+        return `<button onclick="selectHandle('${esc(v.handle)}')" class="px-2 py-1 rounded-md text-[11px] border border-slate-700 text-slate-200 hover:border-rose-400 ${active}">${esc(v.handle)}: ${v.total}${neg}</button>`;
+      }).join("") || `<span class="text-xs text-slate-500">Waiting for tweets...</span>`;
+
+      document.getElementById("districtStrip").innerHTML = latestData.districts.map(d => {
+        const active = selectedDistrict === d.name ? "ring-2 ring-amber-400 bg-amber-500/20" : "bg-slate-800/80";
+        const neg = d.negative > 0 ? `<span class="text-red-400 font-bold ml-1">(${d.negative}N)</span>` : "";
+        return `<button onclick="selectDistrict('${esc(d.name)}')" class="px-2 py-1 rounded-md text-[11px] border border-slate-700 text-slate-200 hover:border-amber-400 ${active}">${esc(d.name)}: ${d.total}${neg}</button>`;
+      }).join("") || `<span class="text-xs text-slate-500">Waiting for tweets...</span>`;
+
+      document.getElementById("deptStrip").innerHTML = latestData.departments.map(dp => {
+        const active = selectedDept === dp.name ? "ring-2 ring-sky-400 bg-sky-500/20" : "bg-slate-800/80";
+        const neg = dp.negative > 0 ? `<span class="text-red-400 font-bold ml-1">(${dp.negative}N)</span>` : "";
+        return `<button onclick="selectDept('${esc(dp.name)}')" class="px-2 py-1 rounded-md text-[11px] border border-slate-700 text-slate-200 hover:border-sky-400 ${active}">${esc(dp.name)}: ${dp.total}${neg}</button>`;
+      }).join("") || `<span class="text-xs text-slate-500">Waiting for tweets...</span>`;
+
+      const bar = document.getElementById("activeFilterBar");
+      if (selectedDistrict || selectedDept || selectedHandle) {
+        const parts = [];
+        if (selectedHandle) parts.push(`Handle: ${selectedHandle}`);
+        if (selectedDistrict) parts.push(`District: ${selectedDistrict}`);
+        if (selectedDept) parts.push(`Dept: ${selectedDept}`);
+        document.getElementById("activeFilterText").textContent = "Filter → " + parts.join(" | ");
+        bar.classList.remove("hidden");
+      } else {
+        bar.classList.add("hidden");
+      }
+    }
+
+    function renderFeed() {
+      if (!latestData) return;
+      const grid = document.getElementById("feedGrid");
+      const q = document.getElementById("searchBox").value.trim().toLowerCase();
+
+      const list = latestData.items.filter(item => {
+        if (currentTab === "negative" && item.sentiment !== "negative") return false;
+        if (currentTab === "positive" && item.sentiment !== "positive") return false;
+        if (currentTab === "hindi" && item.language !== "Hindi") return false;
+        if (currentTab === "english" && item.language !== "English") return false;
+        if (selectedDistrict && item.district !== selectedDistrict) return false;
+        if (selectedDept && item.department !== selectedDept) return false;
+        if (selectedHandle && item.handle !== selectedHandle) return false;
+        if (q && !(item.title.toLowerCase().includes(q) || item.source.toLowerCase().includes(q))) return false;
+        return true;
+      });
+
+      document.getElementById("postCount").textContent = `${list.length} tweets`;
+
+      if (!list.length) {
+        grid.innerHTML = `<div class="col-span-full glass rounded-xl p-8 text-center space-y-2">
+          <div class="text-sm font-bold text-slate-200">Abhi koi live tweet nahi aaya hai</div>
+          <div class="text-xs text-slate-400">Chrome Extension load karke upar "▶ Start Live 𝕏 Stream Tab" dabao — 10 second mein live tweets aane shuru ho jayenge.</div>
+        </div>`;
+        return;
+      }
+
+      grid.innerHTML = list.map(item => {
+        const sentStyles = item.sentiment === "negative"
+          ? { border: "border-l-4 border-l-red-500", badge: "bg-red-500/20 text-red-300 border-red-500/40", label: "NEGATIVE" }
+          : item.sentiment === "positive"
+            ? { border: "border-l-4 border-l-emerald-500", badge: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40", label: "POSITIVE" }
+            : { border: "border-l-4 border-l-slate-600", badge: "bg-slate-700/60 text-slate-300 border-slate-600", label: "NEUTRAL" };
+
+        return `
+          <article class="glass rounded-xl p-3.5 flex flex-col justify-between gap-2 hover:border-slate-500 transition ${sentStyles.border}">
+            <div>
+              <div class="flex flex-wrap items-center justify-between gap-1.5 mb-1.5">
+                <div class="flex flex-wrap items-center gap-1">
+                  <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-black text-white border border-slate-500">𝕏 LIVE</span>
+                  <span class="px-1.5 py-0.5 rounded text-[10px] font-bold border ${sentStyles.badge}">${sentStyles.label}</span>
+                  <span class="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-amber-300">${esc(item.district)}</span>
+                </div>
+                <span class="text-[11px] font-bold text-emerald-300">${esc(item.time_ago)}</span>
+              </div>
+              <div class="text-xs font-bold text-sky-400 mb-1">${esc(item.source)}</div>
+              <p class="text-[13px] text-slate-100 leading-snug break-words whitespace-pre-line">${esc(item.title)}</p>
+            </div>
+            <div class="flex items-center justify-between pt-2 border-t border-slate-800/80 text-[11px]">
+              <span class="text-slate-400">${esc(item.metrics)} · ${esc(item.time_str)}</span>
+              <a href="${esc(item.url)}" target="_blank" rel="noopener" class="text-sky-400 hover:text-sky-300 font-semibold">View on 𝕏 ↗</a>
+            </div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    function openBriefModal() {
+      if (!latestData) return;
+      const s = latestData.stats;
+      const topNeg = latestData.items.filter(i => i.sentiment === "negative").slice(0, 5);
+      const topPos = latestData.items.filter(i => i.sentiment === "positive").slice(0, 3);
+
+      let text = `📊 *RAJWATCH 𝕏 LIVE — PUBLIC SENTIMENT BRIEF*\n`;
+      text += `🕒 Updated: ${latestData.updated_at}\n`;
+      text += `🚨 Crisis Score: ${s.crisis_score}/100\n\n`;
+      text += `📈 *LIVE TWEETS ANALYZED: ${s.total}*\n`;
+      text += `🔴 Negative: ${s.negative} (${s.negative_pct}%)\n`;
+      text += `🟢 Positive: ${s.positive} (${s.positive_pct}%)\n`;
+      text += `⚪ Neutral: ${s.neutral} (${s.neutral_pct}%)\n\n`;
+      text += `🚨 *TOP NEGATIVE TWEETS:*\n`;
+      topNeg.forEach((n, i) => { text += `${i + 1}. [${n.time_ago} | ${n.handle}] ${n.title.slice(0, 140)}\n`; });
+      text += `\n✅ *TOP POSITIVE TWEETS:*\n`;
+      topPos.forEach((p, i) => { text += `${i + 1}. [${p.handle}] ${p.title.slice(0, 140)}\n`; });
+
+      document.getElementById("briefText").value = text;
+      document.getElementById("briefModal").classList.remove("hidden");
+    }
+
+    function closeBriefModal() { document.getElementById("briefModal").classList.add("hidden"); }
+    function copyBrief() {
+      const ta = document.getElementById("briefText");
+      ta.select();
+      navigator.clipboard.writeText(ta.value);
+      alert("WhatsApp Brief copy ho gaya!");
+    }
+
+    function exportCSV() {
+      if (!latestData) return;
+      let csv = "\uFEFFTime (IST),Ago,Handle,Name,Language,Sentiment,District,Department,Tweet,Link\n";
+      latestData.items.forEach(i => {
+        const row = [
+          i.time_str, i.time_ago, i.handle, i.name, i.language,
+          i.sentiment, i.district, i.department, i.title.replace(/"/g, '""'), i.url
+        ].map(v => `"${v}"`).join(",");
+        csv += row + "\n";
+      });
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `RajWatch_X_Live_${new Date().toISOString().slice(0,10)}.csv`;
+      link.click();
+    }
+
+    async function fetchData() {
+      try {
+        const res = await fetch(`/api/feed?keywords=${encodeURIComponent(keywords.join(","))}`);
+        const data = await res.json();
+        latestData = data;
+        const s = data.stats;
+
+        document.getElementById("lastUpdated").textContent = `Live Sync: ${data.updated_at}`;
+        document.getElementById("kpiNeg").textContent = s.negative;
+        document.getElementById("kpiNegPct").textContent = `${s.negative_pct}%`;
+        document.getElementById("kpiPos").textContent = s.positive;
+        document.getElementById("kpiPosPct").textContent = `${s.positive_pct}%`;
+        document.getElementById("kpiTotal").textContent = s.total;
+        document.getElementById("kpiLang").textContent = `${s.hindi_count} HI / ${s.english_count} EN`;
+
+        const xb = document.getElementById("xStatusBadge");
+        const wb = document.getElementById("waitingBanner");
+        if (data.status === "LIVE_BRIDGE" || data.status === "LIVE_API") {
+          xb.textContent = `𝕏: LIVE STREAMING (${s.total})`;
+          xb.className = "px-2.5 py-1.5 rounded-lg text-xs font-bold border bg-emerald-950/80 border-emerald-500 text-emerald-300";
+          wb.classList.add("hidden");
+        } else {
+          xb.textContent = "𝕏: Waiting for Live Tab...";
+          xb.className = "px-2.5 py-1.5 rounded-lg text-xs font-bold border bg-amber-950/60 border-amber-500/40 text-amber-300";
+          wb.classList.remove("hidden");
+        }
+
+        const cb = document.getElementById("crisisBadge");
+        if (s.crisis_score >= 60) {
+          cb.textContent = `Crisis: ${s.crisis_score}/100 (HIGH)`;
+          cb.className = "px-2.5 py-1.5 rounded-lg text-xs font-bold border bg-red-950/80 border-red-500 text-red-300";
+        } else if (s.crisis_score >= 30) {
+          cb.textContent = `Crisis: ${s.crisis_score}/100 (MED)`;
+          cb.className = "px-2.5 py-1.5 rounded-lg text-xs font-bold border bg-amber-950/80 border-amber-500 text-amber-300";
+        } else {
+          cb.textContent = `Crisis: ${s.crisis_score}/100 (SAFE)`;
+          cb.className = "px-2.5 py-1.5 rounded-lg text-xs font-bold border bg-emerald-950/60 border-emerald-600/40 text-emerald-300";
+        }
+
+        if (prevNegCount > 0 && s.negative > prevNegCount) playBeep();
+        prevNegCount = s.negative;
+
+        renderCharts(data);
+        renderRadars();
+        renderFeed();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    renderKeywords();
+    fetchData();
+    // Har 10 second mein auto-update (bilkul live ticker ki tarah)
+    setInterval(fetchData, 10000);
+  </script>
+</body>
+</html>
