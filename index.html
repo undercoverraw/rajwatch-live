@@ -3,239 +3,111 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RAJWATCH PRO | 360° 𝕏 Live + Newspapers + Live TV War Room</title>
+  <title>RajWatch Live — Rajasthan Real-Time Command Center</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body { background: #050a14; color: #e2e8f0; font-family: system-ui, -apple-system, sans-serif; }
-    .glass { background: rgba(15, 23, 42, 0.88); border: 1px solid rgba(51, 65, 85, 0.72); }
-    .pulse-dot { animation: pulse 1.5s infinite; }
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+    body { background: #070b14; color: #e2e8f0; font-family: system-ui, -apple-system, sans-serif; }
+    @keyframes flashNew {
+      0% { box-shadow: 0 0 0 2px #ef4444, 0 0 24px rgba(239,68,68,.55); background: #261019; }
+      100% { box-shadow: 0 0 0 1px #1e293b; background: #0f172a; }
+    }
+    .new-flash { animation: flashNew 4s ease-out; }
   </style>
 </head>
-<body class="min-h-screen pb-10">
-
-  <header class="sticky top-0 z-40 bg-[#050a14]/95 backdrop-blur border-b border-slate-800 px-4 py-2.5">
-    <div class="max-w-[1550px] mx-auto flex flex-wrap items-center justify-between gap-2">
-      <div class="flex items-center gap-2.5">
-        <span class="w-3 h-3 rounded-full bg-emerald-400 pulse-dot"></span>
+<body class="min-h-screen">
+  <!-- Top Command Header -->
+  <header class="sticky top-0 z-30 bg-[#0b1222]/95 backdrop-blur border-b border-slate-800 px-4 py-3">
+    <div class="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <span class="h-3 w-3 rounded-full bg-emerald-400 animate-pulse"></span>
         <div>
-          <h1 class="text-lg font-extrabold tracking-wide text-white leading-tight">
-            RAJWATCH <span class="text-sky-400">PRO</span>
-            <span class="text-[10px] font-bold ml-1.5 px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30">𝕏 + NEWSPAPERS + LIVE TV</span>
-          </h1>
-          <p class="text-[11px] text-slate-400" id="lastUpdated">Connecting...</p>
+          <h1 class="text-lg font-bold tracking-wide text-white">RAJWATCH <span class="text-sky-400">LIVE</span></h1>
+          <p class="text-[11px] text-slate-400">Open-Source Real-Time Rajasthan Media & X Radar</p>
         </div>
       </div>
 
-      <div class="flex flex-wrap items-center gap-2">
-        <div id="xStatusBadge" class="px-2.5 py-1.5 rounded-lg text-xs font-bold border bg-amber-950/60 border-amber-500/40 text-amber-300">
-          𝕏: Waiting for Live Tab...
-        </div>
-
-        <button onclick="openLiveXSearch()" class="px-3 py-1.5 rounded-lg text-xs font-extrabold bg-white text-black hover:bg-slate-200">
-          ▶ Start Live 𝕏 Tab ↗
-        </button>
-
-        <div id="crisisBadge" class="px-2.5 py-1.5 rounded-lg text-xs font-bold border bg-emerald-950/60 border-emerald-600/40 text-emerald-300">
-          Crisis: 0/100
-        </div>
-
-        <button onclick="toggleSound()" id="soundBtn" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-900/50 border border-emerald-600/50 text-emerald-300">
+      <div class="flex flex-wrap items-center gap-2 text-xs">
+        <span id="xBadge" class="px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">Connecting...</span>
+        <span class="px-2.5 py-1 rounded-full bg-slate-800 text-sky-300 border border-slate-700">
+          Next Scan: <b id="timer">25</b>s
+        </span>
+        <button id="soundBtn" onclick="toggleSound()" class="px-3 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 font-semibold">
           Sound: ON
         </button>
-
-        <button onclick="openBriefModal()" class="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-amber-500/20 border border-amber-400/50 text-amber-300">
-          WhatsApp Brief
+        <button id="notifBtn" onclick="enableNotifications()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700">
+          Browser Popup
         </button>
-
-        <button onclick="exportCSV()" class="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-indigo-500/20 border border-indigo-400/50 text-indigo-300">
-          Excel Report
-        </button>
-
-        <button onclick="fetchData(true)" class="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-sky-500 hover:bg-sky-400 text-slate-950">
+        <button onclick="fetchFeed(true)" class="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-semibold">
           Scan Now
         </button>
       </div>
     </div>
+
+    <!-- Priority Keyword Filter Bar (Watch-Tower Style) -->
+    <div class="max-w-6xl mx-auto mt-3 pt-3 border-t border-slate-800/80 flex flex-wrap items-center gap-2">
+      <span class="text-xs font-semibold text-amber-400 uppercase tracking-wider mr-1">Priority Keywords:</span>
+      <div id="kwChips" class="flex flex-wrap gap-1.5"></div>
+      <form onsubmit="addKeyword(event)" class="flex items-center gap-1 ml-auto">
+        <input id="kwInput" type="text" placeholder="Add keyword (e.g. RPSC, JDA)..."
+          class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-sky-500 w-48" />
+        <button class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs px-3 py-1 rounded-lg">+ Add</button>
+      </form>
+    </div>
   </header>
 
-  <main class="max-w-[1550px] mx-auto px-4 mt-3 space-y-3">
+  <main class="max-w-6xl mx-auto px-4 py-4">
+    <!-- Warning Banner if X cookies not configured -->
+    <div id="xErrorBox" class="hidden mb-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/40 text-amber-200 text-xs"></div>
 
-    <!-- KEYWORDS STRIP -->
-    <section class="glass rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2">
-      <div class="flex flex-wrap items-center gap-1.5" id="keywordChips">
-        <span class="text-xs font-bold text-amber-400 uppercase tracking-wider mr-1">Keywords:</span>
+    <!-- Filter Controls + Stats -->
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <div class="flex flex-wrap gap-1.5 text-xs">
+        <button onclick="setSource('ALL')" data-src="ALL" class="src-btn px-3 py-1.5 rounded-lg bg-sky-600 text-white font-semibold">All Live</button>
+        <button onclick="setSource('X')" data-src="X" class="src-btn px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300">X (Twitter)</button>
+        <button onclick="setSource('NEWS')" data-src="NEWS" class="src-btn px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300">Rajasthan News</button>
+        <button onclick="setSource('YOUTUBE')" data-src="YOUTUBE" class="src-btn px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300">YouTube TV</button>
+        <button id="riskOnlyBtn" onclick="toggleRiskOnly()" class="px-3 py-1.5 rounded-lg bg-red-950/60 border border-red-700/50 text-red-300">
+          Only Alerts / Negative
+        </button>
       </div>
-      <div class="flex items-center gap-1.5">
-        <input id="newKeyword" type="text" placeholder="Add keyword (e.g. RPSC, JDA)..."
-          class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-sky-400 w-48"
-          onkeydown="if(event.key==='Enter') addKeyword()" />
-        <button onclick="addKeyword()" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950">+ Add</button>
+      <div class="flex items-center gap-2">
+        <input id="instantSearch" oninput="renderFeed()" type="text" placeholder="Instant filter posts..."
+          class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white w-52 focus:outline-none focus:border-sky-500" />
+        <span id="postCount" class="text-xs text-slate-400">0 posts</span>
       </div>
-    </section>
-
-    <!-- X BRIDGE REMINDER (Auto-hides as soon as X tab is streaming) -->
-    <div id="waitingBanner" class="hidden glass rounded-xl px-4 py-2.5 border-amber-500/50 bg-amber-950/20 flex flex-wrap items-center justify-between gap-2">
-      <span class="text-xs text-amber-200">
-        Newspapers &amp; TV live chal rahe hain. <b>𝕏 Live Tweets</b> jodne ke liye <b>"▶ Start Live 𝕏 Tab"</b> dabao (background mein khula chhod do).
-      </span>
-      <button onclick="openLiveXSearch()" class="px-3 py-1 rounded-lg text-xs font-extrabold bg-amber-400 text-slate-950 hover:bg-amber-300">
-        Open 𝕏 Tab ↗
-      </button>
     </div>
 
-    <!-- MAIN 2-COLUMN LAYOUT: LEFT = LIVE FEED / TV WALL | RIGHT = STICKY GRAPHS & RADARS -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-
-      <!-- LEFT COLUMN (8/12) -->
-      <div class="lg:col-span-8 space-y-3">
-        <div class="glass rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2">
-          <div class="flex flex-wrap items-center gap-1.5" id="tabs">
-            <button onclick="setTab('all')" data-tab="all" class="tab-btn px-2.5 py-1.5 rounded-lg text-xs font-bold bg-sky-500 text-slate-950">All Live</button>
-            <button onclick="setTab('x')" data-tab="x" class="tab-btn px-2.5 py-1.5 rounded-lg text-xs font-bold bg-black text-white border border-slate-500">𝕏 Live</button>
-            <button onclick="setTab('newspaper')" data-tab="newspaper" class="tab-btn px-2.5 py-1.5 rounded-lg text-xs font-bold bg-purple-950/80 text-purple-200 border border-purple-500/40">Newspapers</button>
-            <button onclick="setTab('youtube')" data-tab="youtube" class="tab-btn px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 text-slate-200">YouTube TV</button>
-            <button onclick="setTab('live_tv')" data-tab="live_tv" class="tab-btn px-2.5 py-1.5 rounded-lg text-xs font-bold bg-rose-950/80 text-rose-300 border border-rose-500/50">● LIVE TV</button>
-            <button onclick="setTab('negative')" data-tab="negative" class="tab-btn px-2.5 py-1.5 rounded-lg text-xs font-bold bg-red-950/70 text-red-300 border border-red-600/40">Negative</button>
-            <button onclick="setTab('positive')" data-tab="positive" class="tab-btn px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-950/70 text-emerald-300 border border-emerald-600/40">Positive</button>
-            <button onclick="setTab('hindi')" data-tab="hindi" class="tab-btn px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 text-slate-300">Hindi</button>
-            <button onclick="setTab('english')" data-tab="english" class="tab-btn px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 text-slate-300">English</button>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <input id="searchBox" type="text" placeholder="Filter news / @handle..."
-              oninput="renderFeed()"
-              class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-sky-400 w-40" />
-            <span id="postCount" class="text-xs text-slate-400 font-semibold whitespace-nowrap">0 posts</span>
-          </div>
-        </div>
-
-        <div id="activeFilterBar" class="hidden flex items-center justify-between bg-sky-950/40 border border-sky-500/30 rounded-lg px-3 py-1.5 text-xs text-sky-200">
-          <span id="activeFilterText"></span>
-          <button onclick="clearSubFilters()" class="text-amber-300 font-bold hover:underline">Clear Filter ✕</button>
-        </div>
-
-        <!-- LIVE TV WALL (Renders once so streams never reload during auto-refresh) -->
-        <section id="liveTvContainer" class="hidden grid grid-cols-1 md:grid-cols-2 gap-3"></section>
-
-        <!-- UNIFIED FEED (X + NEWSPAPERS + YOUTUBE) -->
-        <section id="feedGrid" class="grid grid-cols-1 md:grid-cols-2 gap-3"></section>
-      </div>
-
-      <!-- RIGHT SIDEBAR (4/12): STICKY GRAPHS + VOICES + RADARS -->
-      <aside class="lg:col-span-4 lg:sticky lg:top-16 space-y-3">
-        <div class="grid grid-cols-3 gap-2">
-          <div class="glass rounded-xl p-2.5 border-red-500/30 text-center">
-            <div class="text-[10px] text-red-400 font-bold uppercase">Negative</div>
-            <div class="text-lg font-extrabold text-red-400" id="kpiNeg">0</div>
-            <div class="text-[10px] text-slate-400" id="kpiNegPct">0%</div>
-          </div>
-          <div class="glass rounded-xl p-2.5 border-emerald-500/30 text-center">
-            <div class="text-[10px] text-emerald-400 font-bold uppercase">Positive</div>
-            <div class="text-lg font-extrabold text-emerald-400" id="kpiPos">0</div>
-            <div class="text-[10px] text-slate-400" id="kpiPosPct">0%</div>
-          </div>
-          <div class="glass rounded-xl p-2.5 text-center">
-            <div class="text-[10px] text-slate-400 font-bold uppercase">Total Tracked</div>
-            <div class="text-lg font-extrabold text-white" id="kpiTotal">0</div>
-            <div class="text-[10px] text-sky-400 font-semibold" id="kpiBreakdown">0 X · 0 NP · 0 TV</div>
-          </div>
-        </div>
-
-        <div class="glass rounded-xl p-3">
-          <div class="flex items-center justify-between mb-1.5">
-            <h2 class="text-xs font-bold text-white uppercase tracking-wide">Full-Day Sentiment Graph (IST)</h2>
-            <span class="text-[10px] text-slate-400">Red=Neg | Green=Pos</span>
-          </div>
-          <div class="h-48">
-            <canvas id="hourlyChart"></canvas>
-          </div>
-        </div>
-
-        <div class="glass rounded-xl p-3">
-          <div class="flex items-center justify-between mb-1">
-            <h2 class="text-xs font-bold text-white uppercase tracking-wide">Overall Govt Sentiment Split</h2>
-            <span class="text-[10px] text-slate-400" id="langSplit">HI 0 | EN 0</span>
-          </div>
-          <div class="h-36 flex items-center justify-center">
-            <canvas id="donutChart"></canvas>
-          </div>
-        </div>
-
-        <div class="glass rounded-xl p-3">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs font-bold uppercase tracking-wide text-rose-400">Top 𝕏 Voices (Click to Filter)</h3>
-          </div>
-          <div id="voicesStrip" class="flex flex-wrap gap-1.5"></div>
-        </div>
-
-        <div class="glass rounded-xl p-3">
-          <h3 class="text-xs font-bold uppercase tracking-wide text-amber-400 mb-2">District Heat Radar</h3>
-          <div id="districtStrip" class="flex flex-wrap gap-1.5"></div>
-        </div>
-
-        <div class="glass rounded-xl p-3">
-          <h3 class="text-xs font-bold uppercase tracking-wide text-sky-400 mb-2">Department Radar</h3>
-          <div id="deptStrip" class="flex flex-wrap gap-1.5"></div>
-        </div>
-      </aside>
+    <!-- Live Feed Stream -->
+    <div id="feed" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div class="col-span-full text-center py-12 text-slate-400 text-sm">Loading live Rajasthan feeds...</div>
     </div>
   </main>
 
-  <div id="briefModal" class="fixed inset-0 z-50 hidden bg-black/75 flex items-center justify-center p-4">
-    <div class="glass rounded-2xl max-w-2xl w-full p-5 space-y-3">
-      <div class="flex items-center justify-between">
-        <h3 class="text-base font-bold text-amber-400">1-Click CMO / Manager WhatsApp Brief</h3>
-        <button onclick="closeBriefModal()" class="text-slate-400 hover:text-white text-sm font-bold">✕ Close</button>
-      </div>
-      <textarea id="briefText" rows="13" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-slate-200 font-mono focus:outline-none"></textarea>
-      <div class="flex justify-end gap-2">
-        <button onclick="copyBrief()" class="px-4 py-2 rounded-lg text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950">Copy for WhatsApp</button>
-      </div>
-    </div>
-  </div>
-
   <script>
-    let keywords = JSON.parse(localStorage.getItem("rw_x_keywords") || '["Bhajanlal","RajCMO","Rajasthan govt","Jaipur","RPSC","paper leak","Jila Pramukh"]');
-    let latestData = null;
-    let currentTab = "all";
-    let selectedDistrict = null;
-    let selectedDept = null;
-    let selectedHandle = null;
+    const DEFAULT_KEYWORDS = ["Bhajanlal", "RajCMO", "Rajasthan govt", "Jaipur", "paper leak", "RPSC"];
+    let keywords = JSON.parse(localStorage.getItem("rajwatch_kw") || "null") || [...DEFAULT_KEYWORDS];
+    let activeKeywordFilter = null;
+    let currentSource = "ALL";
+    let riskOnly = false;
     let soundOn = true;
-    let prevNegCount = 0;
-    let tvRendered = false;
-    let hourlyChartObj = null;
-    let donutChartObj = null;
+    let allItems = [];
+    let seenIds = new Set();
+    let firstLoad = true;
+    let countdown = 25;
 
-    function esc(str) {
-      return String(str || "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
-    }
-
-    function openLiveXSearch() {
-      const q = "(" + keywords.map(k => k.includes(" ") ? `"${k}"` : k).join(" OR ") + ") -filter:retweets";
-      const url = `https://x.com/search?q=${encodeURIComponent(q)}&src=typed_query&f=live&rajwatch=1`;
-      window.open(url, "_blank");
-    }
-
-    function playBeep() {
+    function playBeep(isAlert) {
       if (!soundOn) return;
       try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        osc.type = "sine";
-        osc.frequency.value = 880;
+        osc.type = isAlert ? "sawtooth" : "sine";
+        osc.frequency.value = isAlert ? 880 : 620;
         gain.gain.value = 0.08;
         osc.connect(gain);
         gain.connect(ctx.destination);
         osc.start();
-        setTimeout(() => osc.stop(), 200);
+        setTimeout(() => { osc.stop(); ctx.close(); }, isAlert ? 320 : 160);
       } catch (e) {}
     }
 
@@ -244,327 +116,202 @@
       const btn = document.getElementById("soundBtn");
       btn.textContent = soundOn ? "Sound: ON" : "Sound: OFF";
       btn.className = soundOn
-        ? "px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-900/50 border border-emerald-600/50 text-emerald-300"
-        : "px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 border border-slate-700 text-slate-400";
+        ? "px-3 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 font-semibold"
+        : "px-3 py-1.5 rounded-lg bg-slate-800 text-slate-400 border border-slate-700";
+      if (soundOn) playBeep(false);
     }
 
-    function renderKeywords() {
-      const box = document.getElementById("keywordChips");
-      box.innerHTML = `<span class="text-xs font-bold text-amber-400 uppercase tracking-wider mr-1">Keywords:</span>`;
-      keywords.forEach((kw, i) => {
-        const chip = document.createElement("span");
-        chip.className = "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs bg-slate-800 border border-slate-700 text-slate-200";
-        chip.innerHTML = `${esc(kw)} <button onclick="removeKeyword(${i})" class="text-slate-400 hover:text-red-400 font-bold">×</button>`;
-        box.appendChild(chip);
+    function enableNotifications() {
+      if (!("Notification" in window)) return alert("Ye browser desktop notifications support nahi karta.");
+      Notification.requestPermission().then(p => {
+        if (p === "granted") {
+          document.getElementById("notifBtn").textContent = "Popup: ON";
+          new Notification("RajWatch Live Ready", { body: "Naya Rajasthan update aate hi popup milega!" });
+        }
       });
     }
 
-    function addKeyword() {
-      const inp = document.getElementById("newKeyword");
+    function renderKeywords() {
+      const box = document.getElementById("kwChips");
+      box.innerHTML = keywords.map(k => {
+        const active = activeKeywordFilter === k;
+        return `
+          <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs cursor-pointer border ${
+            active ? "bg-amber-500 text-slate-950 border-amber-400 font-bold" : "bg-slate-800/90 text-slate-200 border-slate-700 hover:border-sky-500"
+          }" onclick="toggleKeywordFilter('${k.replace(/'/g, "\\'")}')">
+            ${k}
+            <button onclick="removeKeyword(event, '${k.replace(/'/g, "\\'")}')" class="ml-1 text-[10px] opacity-70 hover:opacity-100">✕</button>
+          </span>`;
+      }).join("");
+    }
+
+    function toggleKeywordFilter(k) {
+      activeKeywordFilter = activeKeywordFilter === k ? null : k;
+      renderKeywords();
+      renderFeed();
+    }
+
+    function addKeyword(e) {
+      e.preventDefault();
+      const inp = document.getElementById("kwInput");
       const val = inp.value.trim();
       if (val && !keywords.includes(val)) {
-        keywords.push(val);
-        localStorage.setItem("rw_x_keywords", JSON.stringify(keywords));
+        keywords.unshift(val);
+        localStorage.setItem("rajwatch_kw", JSON.stringify(keywords));
         renderKeywords();
-        fetchData(true);
+        fetchFeed(true);
       }
       inp.value = "";
     }
 
-    function removeKeyword(idx) {
-      keywords.splice(idx, 1);
-      localStorage.setItem("rw_x_keywords", JSON.stringify(keywords));
+    function removeKeyword(e, k) {
+      e.stopPropagation();
+      keywords = keywords.filter(x => x !== k);
+      if (activeKeywordFilter === k) activeKeywordFilter = null;
+      localStorage.setItem("rajwatch_kw", JSON.stringify(keywords));
       renderKeywords();
-      fetchData(true);
+      renderFeed();
     }
 
-    function setTab(tab) {
-      currentTab = tab;
-      document.querySelectorAll(".tab-btn").forEach(btn => {
-        if (btn.dataset.tab === tab) btn.classList.add("ring-2", "ring-sky-400");
-        else btn.classList.remove("ring-2", "ring-sky-400");
+    function setSource(src) {
+      currentSource = src;
+      document.querySelectorAll(".src-btn").forEach(b => {
+        const active = b.dataset.src === src;
+        b.className = active
+          ? "src-btn px-3 py-1.5 rounded-lg bg-sky-600 text-white font-semibold"
+          : "src-btn px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300";
       });
       renderFeed();
     }
 
-    function selectDistrict(d) { selectedDistrict = selectedDistrict === d ? null : d; renderRadars(); renderFeed(); }
-    function selectDept(dp) { selectedDept = selectedDept === dp ? null : dp; renderRadars(); renderFeed(); }
-    function selectHandle(h) { selectedHandle = selectedHandle === h ? null : h; renderRadars(); renderFeed(); }
-    function clearSubFilters() { selectedDistrict = null; selectedDept = null; selectedHandle = null; renderRadars(); renderFeed(); }
-
-    function renderCharts(data) {
-      const ctx1 = document.getElementById("hourlyChart").getContext("2d");
-      if (hourlyChartObj) hourlyChartObj.destroy();
-      hourlyChartObj = new Chart(ctx1, {
-        type: "line",
-        data: {
-          labels: data.hourly_chart.labels,
-          datasets: [
-            { label: "Negative", data: data.hourly_chart.negative, borderColor: "#f87171", backgroundColor: "rgba(248,113,113,0.18)", fill: true, tension: 0.35, borderWidth: 2 },
-            { label: "Positive", data: data.hourly_chart.positive, borderColor: "#34d399", backgroundColor: "rgba(52,211,153,0.14)", fill: true, tension: 0.35, borderWidth: 2 },
-            { label: "Neutral", data: data.hourly_chart.neutral, borderColor: "#94a3b8", borderDash: [3, 3], tension: 0.35, borderWidth: 1.3 }
-          ]
-        },
-        options: {
-          animation: false,
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { labels: { color: "#cbd5e1", font: { size: 10 }, boxWidth: 10 } } },
-          scales: {
-            x: { ticks: { color: "#94a3b8", font: { size: 9 } }, grid: { color: "rgba(51,65,85,0.25)" } },
-            y: { beginAtZero: true, ticks: { color: "#94a3b8", font: { size: 9 }, precision: 0 }, grid: { color: "rgba(51,65,85,0.25)" } }
-          }
-        }
-      });
-
-      const ctx2 = document.getElementById("donutChart").getContext("2d");
-      if (donutChartObj) donutChartObj.destroy();
-      donutChartObj = new Chart(ctx2, {
-        type: "doughnut",
-        data: {
-          labels: ["Negative", "Positive", "Neutral"],
-          datasets: [{ data: [data.stats.negative, data.stats.positive, data.stats.neutral], backgroundColor: ["#ef4444", "#10b981", "#64748b"], borderWidth: 0 }]
-        },
-        options: {
-          animation: false,
-          responsive: true,
-          maintainAspectRatio: false,
-          cutout: "62%",
-          plugins: { legend: { position: "right", labels: { color: "#cbd5e1", font: { size: 10 }, boxWidth: 10 } } }
-        }
-      });
+    function toggleRiskOnly() {
+      riskOnly = !riskOnly;
+      const btn = document.getElementById("riskOnlyBtn");
+      btn.className = riskOnly
+        ? "px-3 py-1.5 rounded-lg bg-red-600 text-white font-semibold"
+        : "px-3 py-1.5 rounded-lg bg-red-950/60 border border-red-700/50 text-red-300";
+      renderFeed();
     }
 
-    function renderRadars() {
-      if (!latestData) return;
-
-      document.getElementById("voicesStrip").innerHTML = (latestData.top_voices || []).map(v => {
-        const active = selectedHandle === v.handle ? "ring-2 ring-rose-400 bg-rose-500/20" : "bg-slate-800/80";
-        const neg = v.negative > 0 ? `<span class="text-red-400 font-bold ml-1">(${v.negative}N)</span>` : "";
-        return `<button onclick="selectHandle('${esc(v.handle)}')" class="px-2 py-1 rounded-md text-[11px] border border-slate-700 text-slate-200 hover:border-rose-400 ${active}">${esc(v.handle)}: ${v.total}${neg}</button>`;
-      }).join("") || `<span class="text-xs text-slate-500">𝕏 Tab start karte hi top handles dikhenge...</span>`;
-
-      document.getElementById("districtStrip").innerHTML = latestData.districts.map(d => {
-        const active = selectedDistrict === d.name ? "ring-2 ring-amber-400 bg-amber-500/20" : "bg-slate-800/80";
-        const neg = d.negative > 0 ? `<span class="text-red-400 font-bold ml-1">(${d.negative}N)</span>` : "";
-        return `<button onclick="selectDistrict('${esc(d.name)}')" class="px-2 py-1 rounded-md text-[11px] border border-slate-700 text-slate-200 hover:border-amber-400 ${active}">${esc(d.name)}: ${d.total}${neg}</button>`;
-      }).join("");
-
-      document.getElementById("deptStrip").innerHTML = latestData.departments.map(dp => {
-        const active = selectedDept === dp.name ? "ring-2 ring-sky-400 bg-sky-500/20" : "bg-slate-800/80";
-        const neg = dp.negative > 0 ? `<span class="text-red-400 font-bold ml-1">(${dp.negative}N)</span>` : "";
-        return `<button onclick="selectDept('${esc(dp.name)}')" class="px-2 py-1 rounded-md text-[11px] border border-slate-700 text-slate-200 hover:border-sky-400 ${active}">${esc(dp.name)}: ${dp.total}${neg}</button>`;
-      }).join("");
-
-      const bar = document.getElementById("activeFilterBar");
-      if (selectedDistrict || selectedDept || selectedHandle) {
-        const parts = [];
-        if (selectedHandle) parts.push(`Handle: ${selectedHandle}`);
-        if (selectedDistrict) parts.push(`District: ${selectedDistrict}`);
-        if (selectedDept) parts.push(`Dept: ${selectedDept}`);
-        document.getElementById("activeFilterText").textContent = "Filter → " + parts.join(" | ");
-        bar.classList.remove("hidden");
-      } else {
-        bar.classList.add("hidden");
-      }
+    function timeAgo(ts) {
+      const diff = Math.max(1, Math.floor(Date.now() / 1000 - ts));
+      if (diff < 60) return `${diff}s ago`;
+      if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+      if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+      return `${Math.floor(diff / 86400)}d ago`;
     }
 
-    function renderFeed() {
-      if (!latestData) return;
-      const tvBox = document.getElementById("liveTvContainer");
-      const grid = document.getElementById("feedGrid");
+    function highlightText(txt) {
+      let safe = txt.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+      keywords.forEach(k => {
+        if (k.length < 2) return;
+        const re = new RegExp(`(${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
+        safe = safe.replace(re, `<mark class="bg-amber-400/25 text-amber-200 px-1 rounded">$1</mark>`);
+      });
+      return safe;
+    }
 
-      if (currentTab === "live_tv") {
-        grid.classList.add("hidden");
-        tvBox.classList.remove("hidden");
-        const streams = latestData.live_tv || [];
-        document.getElementById("postCount").textContent = `${streams.length} Live TV`;
-        if (!tvRendered && streams.length) {
-          tvBox.innerHTML = streams.map(tv => `
-            <div class="glass rounded-xl overflow-hidden flex flex-col">
-              <div class="aspect-video bg-black">
-                <iframe class="w-full h-full" src="${esc(tv.embed_url)}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
-              </div>
-              <div class="p-3">
-                <div class="flex items-center justify-between mb-1">
-                  <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-600 text-white">● LIVE TV</span>
-                  <span class="text-xs text-sky-400 font-semibold">${esc(tv.source)}</span>
-                </div>
-                <p class="text-xs text-slate-200 font-medium">${esc(tv.title)}</p>
-              </div>
-            </div>
-          `).join("");
-          tvRendered = true;
-        }
-        return;
-      }
-
-      tvBox.classList.add("hidden");
-      grid.classList.remove("hidden");
-
-      const q = document.getElementById("searchBox").value.trim().toLowerCase();
-      const list = latestData.items.filter(item => {
-        if (currentTab === "x" && item.category !== "x") return false;
-        if (currentTab === "newspaper" && item.category !== "newspaper") return false;
-        if (currentTab === "youtube" && item.category !== "youtube") return false;
-        if (currentTab === "negative" && item.sentiment !== "negative") return false;
-        if (currentTab === "positive" && item.sentiment !== "positive") return false;
-        if (currentTab === "hindi" && item.language !== "Hindi") return false;
-        if (currentTab === "english" && item.language !== "English") return false;
-        if (selectedDistrict && item.district !== selectedDistrict) return false;
-        if (selectedDept && item.department !== selectedDept) return false;
-        if (selectedHandle && item.handle !== selectedHandle) return false;
-        if (q && !(item.title.toLowerCase().includes(q) || item.source.toLowerCase().includes(q))) return false;
+    function renderFeed(newIdSet = new Set()) {
+      const q = document.getElementById("instantSearch").value.trim().toLowerCase();
+      const filtered = allItems.filter(item => {
+        if (currentSource !== "ALL" && item.source !== currentSource) return false;
+        if (riskOnly && item.risk !== "ALERT") return false;
+        const hay = (item.text + " " + item.author).toLowerCase();
+        if (activeKeywordFilter && !hay.includes(activeKeywordFilter.toLowerCase())) return false;
+        if (q && !hay.includes(q)) return false;
         return true;
       });
 
-      document.getElementById("postCount").textContent = `${list.length} posts`;
-
-      if (!list.length) {
-        grid.innerHTML = `<div class="col-span-full glass rounded-xl p-6 text-center text-slate-400 text-sm">Is filter mein abhi koi post nahi hai.</div>`;
+      document.getElementById("postCount").textContent = `${filtered.length} posts`;
+      const container = document.getElementById("feed");
+      if (!filtered.length) {
+        container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400 text-sm">Is filter par abhi koi post nahi mili.</div>`;
         return;
       }
 
-      grid.innerHTML = list.map(item => {
-        const sentStyles = item.sentiment === "negative"
-          ? { border: "border-l-4 border-l-red-500", badge: "bg-red-500/20 text-red-300 border-red-500/40", label: "NEGATIVE" }
-          : item.sentiment === "positive"
-            ? { border: "border-l-4 border-l-emerald-500", badge: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40", label: "POSITIVE" }
-            : { border: "border-l-4 border-l-slate-600", badge: "bg-slate-700/60 text-slate-300 border-slate-600", label: "NEUTRAL" };
-
-        let catBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-200 border border-purple-500/40">NEWSPAPER · ${esc(item.language.toUpperCase())}</span>`;
-        if (item.category === "x") {
-          catBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-black text-white border border-slate-500">𝕏 LIVE</span>`;
-        } else if (item.category === "youtube") {
-          catBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">YOUTUBE TV</span>`;
-        }
+      container.innerHTML = filtered.map(item => {
+        const isNew = newIdSet.has(item.id);
+        const srcBadge = item.source === "X"
+          ? `<span class="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 font-bold">X LIVE</span>`
+          : item.source === "YOUTUBE"
+          ? `<span class="px-2 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30 font-bold">YOUTUBE</span>`
+          : `<span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">NEWS</span>`;
+        const riskBadge = item.risk === "ALERT"
+          ? `<span class="px-2 py-0.5 rounded bg-red-600 text-white font-bold">ALERT</span>` : "";
+        const newBadge = isNew
+          ? `<span class="px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-extrabold animate-pulse">NEW</span>` : "";
 
         return `
-          <article class="glass rounded-xl p-3.5 flex flex-col justify-between gap-2 hover:border-slate-500 transition ${sentStyles.border}">
-            <div>
-              <div class="flex flex-wrap items-center justify-between gap-1.5 mb-1.5">
-                <div class="flex flex-wrap items-center gap-1">
-                  ${catBadge}
-                  <span class="px-1.5 py-0.5 rounded text-[10px] font-bold border ${sentStyles.badge}">${sentStyles.label}</span>
-                  <span class="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-amber-300">${esc(item.district)}</span>
-                </div>
-                <span class="text-[11px] font-bold text-emerald-300">${esc(item.time_ago)}</span>
-              </div>
-              <div class="text-xs font-bold text-sky-400 mb-1">${esc(item.source)}</div>
-              <p class="text-[13px] text-slate-100 leading-snug break-words whitespace-pre-line">${esc(item.title)}</p>
+          <article class="rounded-xl p-4 bg-[#0f172a] border ${item.risk === "ALERT" ? "border-red-500/50" : "border-slate-800"} hover:border-sky-500/50 transition ${isNew ? "new-flash" : ""}">
+            <div class="flex items-center justify-between gap-2 text-[11px] mb-2">
+              <div class="flex items-center gap-1.5 flex-wrap">${srcBadge} ${riskBadge} ${newBadge}</div>
+              <span class="text-slate-400 font-medium">${timeAgo(item.ts)}</span>
             </div>
-            <div class="flex items-center justify-between pt-2 border-t border-slate-800/80 text-[11px]">
-              <span class="text-slate-400">${item.metrics ? esc(item.metrics) : esc(item.department)} · ${esc(item.time_str)}</span>
-              <a href="${esc(item.url)}" target="_blank" rel="noopener" class="text-sky-400 hover:text-sky-300 font-semibold">Open ↗</a>
+            <p class="text-xs font-semibold text-sky-300 mb-1">${item.author}</p>
+            <p class="text-sm text-slate-100 leading-relaxed mb-3 break-words">${highlightText(item.text)}</p>
+            <div class="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-800/80">
+              <span>${item.source === "X" ? `❤ ${item.likes} &nbsp; 🔁 ${item.retweets}` : "Real-Time Feed"}</span>
+              <a href="${item.url}" target="_blank" class="text-sky-400 hover:underline font-semibold">Open Original ↗</a>
             </div>
-          </article>
-        `;
+          </article>`;
       }).join("");
     }
 
-    function openBriefModal() {
-      if (!latestData) return;
-      const s = latestData.stats;
-      const topNeg = latestData.items.filter(i => i.sentiment === "negative").slice(0, 6);
-      const topPos = latestData.items.filter(i => i.sentiment === "positive").slice(0, 3);
-      const hotDists = latestData.districts.slice(0, 4).map(d => `${d.name} (${d.negative}N)`).join(", ");
-
-      let text = `📊 *RAJWATCH PRO — 360° X, NEWSPAPER & TV BRIEF*\n`;
-      text += `🕒 Updated: ${latestData.updated_at}\n`;
-      text += `🚨 Crisis Meter: ${s.crisis_score}/100\n\n`;
-      text += `📈 *TOTAL TRACKED: ${s.total}* (𝕏: ${s.x_count} | Papers: ${s.newspaper_count} | TV/YT: ${s.youtube_count})\n`;
-      text += `🔴 Negative: ${s.negative} (${s.negative_pct}%)\n`;
-      text += `🟢 Positive: ${s.positive} (${s.positive_pct}%)\n`;
-      text += `⚪ Neutral: ${s.neutral} (${s.neutral_pct}%)\n`;
-      text += `📍 Hotspots: ${hotDists}\n\n`;
-      text += `🚨 *TOP NEGATIVE ALERTS:*\n`;
-      topNeg.forEach((n, i) => { text += `${i + 1}. [${n.category.toUpperCase()} | ${n.time_ago} | ${n.source}] ${n.title.slice(0, 140)}\n`; });
-      text += `\n✅ *TOP POSITIVE COVERAGE:*\n`;
-      topPos.forEach((p, i) => { text += `${i + 1}. [${p.source}] ${p.title.slice(0, 140)}\n`; });
-
-      document.getElementById("briefText").value = text;
-      document.getElementById("briefModal").classList.remove("hidden");
-    }
-
-    function closeBriefModal() { document.getElementById("briefModal").classList.add("hidden"); }
-    function copyBrief() {
-      const ta = document.getElementById("briefText");
-      ta.select();
-      navigator.clipboard.writeText(ta.value);
-      alert("WhatsApp Brief copy ho gaya!");
-    }
-
-    function exportCSV() {
-      if (!latestData) return;
-      let csv = "\uFEFFTime (IST),Ago,Platform,Source,Language,Sentiment,District,Department,Headline/Tweet,Link\n";
-      latestData.items.forEach(i => {
-        const row = [
-          i.time_str, i.time_ago, i.category, i.source, i.language,
-          i.sentiment, i.district, i.department, i.title.replace(/"/g, '""'), i.url
-        ].map(v => `"${v}"`).join(",");
-        csv += row + "\n";
-      });
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = `RajWatch_360_Live_${new Date().toISOString().slice(0,10)}.csv`;
-      link.click();
-    }
-
-    async function fetchData(manual = false) {
+    async function fetchFeed(force = false) {
+      countdown = 25;
       try {
-        const res = await fetch(`/api/feed?keywords=${encodeURIComponent(keywords.join(","))}&force=${manual}`);
+        const res = await fetch(`/api/feed?keywords=${encodeURIComponent(keywords.join(","))}&force=${force}`);
         const data = await res.json();
-        latestData = data;
-        const s = data.stats;
 
-        document.getElementById("lastUpdated").textContent = `Live Sync: ${data.updated_at}`;
-        document.getElementById("kpiNeg").textContent = s.negative;
-        document.getElementById("kpiNegPct").textContent = `${s.negative_pct}%`;
-        document.getElementById("kpiPos").textContent = s.positive;
-        document.getElementById("kpiPosPct").textContent = `${s.positive_pct}%`;
-        document.getElementById("kpiTotal").textContent = s.total;
-        document.getElementById("kpiBreakdown").textContent = `${s.x_count} X · ${s.newspaper_count} NP · ${s.youtube_count} YT`;
-        document.getElementById("langSplit").textContent = `HI ${s.hindi_count} | EN ${s.english_count}`;
-
-        const xb = document.getElementById("xStatusBadge");
-        const wb = document.getElementById("waitingBanner");
-        if (data.status === "LIVE_BRIDGE" || data.status === "LIVE_API") {
-          xb.textContent = `𝕏: LIVE (${s.x_count})`;
-          xb.className = "px-2.5 py-1.5 rounded-lg text-xs font-bold border bg-emerald-950/80 border-emerald-500 text-emerald-300";
-          wb.classList.add("hidden");
+        const xBadge = document.getElementById("xBadge");
+        const xErr = document.getElementById("xErrorBox");
+        if (data.x_status.startsWith("live")) {
+          xBadge.textContent = `X: ${data.x_status.toUpperCase()}`;
+          xBadge.className = "px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold";
+          xErr.classList.add("hidden");
         } else {
-          xb.textContent = "𝕏: Click Start Live Tab";
-          xb.className = "px-2.5 py-1.5 rounded-lg text-xs font-bold border bg-amber-950/60 border-amber-500/40 text-amber-300";
-          wb.classList.remove("hidden");
+          xBadge.textContent = "X: Cookies Pending";
+          xBadge.className = "px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold";
+          xErr.textContent = data.x_error || "News aur YouTube live chal raha hai. X live karne ke liye Render Environment mein X_AUTH_TOKEN aur X_CT0 add karein.";
+          xErr.classList.remove("hidden");
         }
 
-        const cb = document.getElementById("crisisBadge");
-        if (s.crisis_score >= 60) {
-          cb.textContent = `Crisis: ${s.crisis_score}/100 (HIGH)`;
-          cb.className = "px-2.5 py-1.5 rounded-lg text-xs font-bold border bg-red-950/80 border-red-500 text-red-300";
-        } else if (s.crisis_score >= 30) {
-          cb.textContent = `Crisis: ${s.crisis_score}/100 (MED)`;
-          cb.className = "px-2.5 py-1.5 rounded-lg text-xs font-bold border bg-amber-950/80 border-amber-500 text-amber-300";
-        } else {
-          cb.textContent = `Crisis: ${s.crisis_score}/100 (SAFE)`;
-          cb.className = "px-2.5 py-1.5 rounded-lg text-xs font-bold border bg-emerald-950/60 border-emerald-600/40 text-emerald-300";
+        const newIds = new Set();
+        let hasAlert = false;
+        let newestItem = null;
+        data.items.forEach(item => {
+          if (!seenIds.has(item.id)) {
+            seenIds.add(item.id);
+            if (!firstLoad) {
+              newIds.add(item.id);
+              if (!newestItem) newestItem = item;
+              if (item.risk === "ALERT") hasAlert = true;
+            }
+          }
+        });
+
+        allItems = data.items;
+        renderFeed(newIds);
+
+        if (!firstLoad && newIds.size > 0) {
+          playBeep(hasAlert);
+          if ("Notification" in window && Notification.permission === "granted" && newestItem) {
+            new Notification(`${newestItem.source} Update (${newestItem.author})`, { body: newestItem.text.slice(0, 120) });
+          }
         }
-
-        if (!manual && prevNegCount > 0 && s.negative > prevNegCount) playBeep();
-        prevNegCount = s.negative;
-
-        renderCharts(data);
-        renderRadars();
-        renderFeed();
-      } catch (err) {
-        console.error(err);
+        firstLoad = false;
+      } catch (e) {
+        console.error(e);
       }
     }
 
     renderKeywords();
-    fetchData(true);
-    setInterval(() => fetchData(false), 12000);
+    fetchFeed(false);
+    setInterval(() => {
+      countdown--;
+      if (countdown <= 0) fetchFeed(false);
+      document.getElementById("timer").textContent = countdown;
+    }, 1000);
   </script>
 </body>
 </html>
