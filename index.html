@@ -3,10 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RajWatch Live — Rajasthan Real-Time Command Center</title>
+  <title>RajWatch Live Pro — Rajasthan 360° Command Center</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body { background: #070b14; color: #e2e8f0; font-family: system-ui, -apple-system, sans-serif; }
+    .glass { background: #0f172a; border: 1px solid #1e293b; }
     @keyframes flashNew {
       0% { box-shadow: 0 0 0 2px #ef4444, 0 0 24px rgba(239,68,68,.55); background: #261019; }
       100% { box-shadow: 0 0 0 1px #1e293b; background: #0f172a; }
@@ -14,28 +16,38 @@
     .new-flash { animation: flashNew 4s ease-out; }
   </style>
 </head>
-<body class="min-h-screen">
+<body class="min-h-screen pb-10">
+
   <!-- Top Command Header -->
-  <header class="sticky top-0 z-30 bg-[#0b1222]/95 backdrop-blur border-b border-slate-800 px-4 py-3">
-    <div class="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3">
-      <div class="flex items-center gap-3">
+  <header class="sticky top-0 z-30 bg-[#0b1222]/95 backdrop-blur border-b border-slate-800 px-4 py-2.5">
+    <div class="max-w-[1550px] mx-auto flex flex-wrap items-center justify-between gap-2">
+      <div class="flex items-center gap-2.5">
         <span class="h-3 w-3 rounded-full bg-emerald-400 animate-pulse"></span>
         <div>
-          <h1 class="text-lg font-bold tracking-wide text-white">RAJWATCH <span class="text-sky-400">LIVE</span></h1>
-          <p class="text-[11px] text-slate-400">Open-Source Real-Time Rajasthan Media & X Radar</p>
+          <h1 class="text-lg font-bold tracking-wide text-white leading-tight">
+            RAJWATCH <span class="text-sky-400">LIVE PRO</span>
+          </h1>
+          <p class="text-[11px] text-slate-400" id="lastUpdated">Real-Time X, Hindi/English News, Websites &amp; Live TV</p>
         </div>
       </div>
 
-      <div class="flex flex-wrap items-center gap-2 text-xs">
+      <div class="flex flex-wrap items-center gap-1.5 text-xs">
         <span id="xBadge" class="px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">Connecting...</span>
+        <span id="crisisBadge" class="px-2.5 py-1 rounded-full bg-emerald-950/60 text-emerald-300 border border-emerald-600/40 font-bold">Crisis: 0/100</span>
         <span class="px-2.5 py-1 rounded-full bg-slate-800 text-sky-300 border border-slate-700">
-          Next Scan: <b id="timer">25</b>s
+          Scan: <b id="timer">25</b>s
         </span>
-        <button id="soundBtn" onclick="toggleSound()" class="px-3 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 font-semibold">
+        <button id="soundBtn" onclick="toggleSound()" class="px-2.5 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 font-semibold">
           Sound: ON
         </button>
-        <button id="notifBtn" onclick="enableNotifications()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700">
-          Browser Popup
+        <button id="notifBtn" onclick="enableNotifications()" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700">
+          Popup
+        </button>
+        <button onclick="openBriefModal()" class="px-2.5 py-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-400/50 font-semibold">
+          WhatsApp Brief
+        </button>
+        <button onclick="exportCSV()" class="px-2.5 py-1.5 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-400/50 font-semibold">
+          Excel
         </button>
         <button onclick="fetchFeed(true)" class="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-semibold">
           Scan Now
@@ -43,8 +55,8 @@
       </div>
     </div>
 
-    <!-- Priority Keyword Filter Bar (Watch-Tower Style) -->
-    <div class="max-w-6xl mx-auto mt-3 pt-3 border-t border-slate-800/80 flex flex-wrap items-center gap-2">
+    <!-- Priority Keyword Filter Bar -->
+    <div class="max-w-[1550px] mx-auto mt-2.5 pt-2.5 border-t border-slate-800/80 flex flex-wrap items-center gap-2">
       <span class="text-xs font-semibold text-amber-400 uppercase tracking-wider mr-1">Priority Keywords:</span>
       <div id="kwChips" class="flex flex-wrap gap-1.5"></div>
       <form onsubmit="addKeyword(event)" class="flex items-center gap-1 ml-auto">
@@ -55,45 +67,149 @@
     </div>
   </header>
 
-  <main class="max-w-6xl mx-auto px-4 py-4">
-    <!-- Warning Banner if X cookies not configured -->
-    <div id="xErrorBox" class="hidden mb-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/40 text-amber-200 text-xs"></div>
+  <main class="max-w-[1550px] mx-auto px-4 py-4">
+    <div id="xErrorBox" class="hidden mb-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/40 text-amber-200 text-xs"></div>
 
-    <!-- Filter Controls + Stats -->
-    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-      <div class="flex flex-wrap gap-1.5 text-xs">
-        <button onclick="setSource('ALL')" data-src="ALL" class="src-btn px-3 py-1.5 rounded-lg bg-sky-600 text-white font-semibold">All Live</button>
-        <button onclick="setSource('X')" data-src="X" class="src-btn px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300">X (Twitter)</button>
-        <button onclick="setSource('NEWS')" data-src="NEWS" class="src-btn px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300">Rajasthan News</button>
-        <button onclick="setSource('YOUTUBE')" data-src="YOUTUBE" class="src-btn px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300">YouTube TV</button>
-        <button id="riskOnlyBtn" onclick="toggleRiskOnly()" class="px-3 py-1.5 rounded-lg bg-red-950/60 border border-red-700/50 text-red-300">
-          Only Alerts / Negative
-        </button>
-      </div>
-      <div class="flex items-center gap-2">
-        <input id="instantSearch" oninput="renderFeed()" type="text" placeholder="Instant filter posts..."
-          class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white w-52 focus:outline-none focus:border-sky-500" />
-        <span id="postCount" class="text-xs text-slate-400">0 posts</span>
-      </div>
-    </div>
+    <!-- 2-COLUMN WAR ROOM: LEFT = LIVE FEED / LIVE TV | RIGHT = GRAPHS & RADAR -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
 
-    <!-- Live Feed Stream -->
-    <div id="feed" class="grid grid-cols-1 md:grid-cols-2 gap-3">
-      <div class="col-span-full text-center py-12 text-slate-400 text-sm">Loading live Rajasthan feeds...</div>
+      <!-- LEFT COLUMN (8/12): FILTERS + LIVE FEED -->
+      <div class="lg:col-span-8 space-y-3">
+        <div class="glass rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2">
+          <div class="flex flex-wrap gap-1.5 text-xs">
+            <button onclick="setSource('ALL')" data-src="ALL" class="src-btn px-2.5 py-1.5 rounded-lg bg-sky-600 text-white font-semibold">All Live</button>
+            <button onclick="setSource('X')" data-src="X" class="src-btn px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-200">X (Twitter)</button>
+            <button onclick="setSource('NEWSPAPER')" data-src="NEWSPAPER" class="src-btn px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-300">Newspapers</button>
+            <button onclick="setSource('NEWS')" data-src="NEWS" class="src-btn px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-300">Web News</button>
+            <button onclick="setSource('HINDI')" data-src="HINDI" class="src-btn px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-300">Hindi</button>
+            <button onclick="setSource('ENGLISH')" data-src="ENGLISH" class="src-btn px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-300">English</button>
+            <button onclick="setSource('YOUTUBE')" data-src="YOUTUBE" class="src-btn px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-300">YouTube TV</button>
+            <button onclick="setSource('LIVE_TV')" data-src="LIVE_TV" class="src-btn px-2.5 py-1.5 rounded-lg bg-rose-950/70 border border-rose-600/50 text-rose-300 font-semibold">● LIVE TV</button>
+            <button id="negOnlyBtn" onclick="toggleSentFilter('negative')" class="px-2.5 py-1.5 rounded-lg bg-red-950/60 border border-red-700/50 text-red-300">Only Negative</button>
+            <button id="posOnlyBtn" onclick="toggleSentFilter('positive')" class="px-2.5 py-1.5 rounded-lg bg-emerald-950/60 border border-emerald-700/50 text-emerald-300">Only Positive</button>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <input id="instantSearch" oninput="renderFeed()" type="text" placeholder="Instant filter posts..."
+              class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white w-44 focus:outline-none focus:border-sky-500" />
+            <span id="postCount" class="text-xs text-slate-400 whitespace-nowrap">0 posts</span>
+          </div>
+        </div>
+
+        <div id="subFilterBar" class="hidden flex items-center justify-between bg-sky-950/40 border border-sky-500/30 rounded-lg px-3 py-1.5 text-xs text-sky-200">
+          <span id="subFilterText"></span>
+          <button onclick="clearSubFilters()" class="text-amber-300 font-bold hover:underline">Clear ✕</button>
+        </div>
+
+        <!-- LIVE TV WALL (Renders once so streams never reset during 25s scan) -->
+        <div id="liveTvWall" class="hidden grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+
+        <!-- LIVE FEED STREAM -->
+        <div id="feed" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div class="col-span-full text-center py-12 text-slate-400 text-sm">Loading live Rajasthan feeds...</div>
+        </div>
+      </div>
+
+      <!-- RIGHT SIDEBAR (4/12): STICKY FULL-DAY SENTIMENT GRAPHS & RADAR -->
+      <aside class="lg:col-span-4 lg:sticky lg:top-28 space-y-3">
+        <!-- Sentiment KPI Counters -->
+        <div class="grid grid-cols-3 gap-2">
+          <div class="glass rounded-xl p-2.5 border-red-500/30 text-center">
+            <div class="text-[10px] text-red-400 font-bold uppercase">Negative</div>
+            <div class="text-lg font-extrabold text-red-400" id="kpiNeg">0</div>
+            <div class="text-[10px] text-slate-400" id="kpiNegPct">0%</div>
+          </div>
+          <div class="glass rounded-xl p-2.5 border-emerald-500/30 text-center">
+            <div class="text-[10px] text-emerald-400 font-bold uppercase">Positive</div>
+            <div class="text-lg font-extrabold text-emerald-400" id="kpiPos">0</div>
+            <div class="text-[10px] text-slate-400" id="kpiPosPct">0%</div>
+          </div>
+          <div class="glass rounded-xl p-2.5 text-center">
+            <div class="text-[10px] text-slate-400 font-bold uppercase">Total / X</div>
+            <div class="text-lg font-extrabold text-white" id="kpiTotal">0</div>
+            <div class="text-[10px] text-sky-400 font-semibold" id="kpiX">0 X · 0 YT</div>
+          </div>
+        </div>
+
+        <!-- Full-Day Hourly Sentiment Graph (IST) -->
+        <div class="glass rounded-xl p-3">
+          <div class="flex items-center justify-between mb-1.5">
+            <h2 class="text-xs font-bold text-white uppercase tracking-wide">Full-Day Govt Sentiment (IST)</h2>
+            <span class="text-[10px] text-slate-400">Red=Neg | Green=Pos</span>
+          </div>
+          <div class="h-48">
+            <canvas id="hourlyChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Sentiment Donut Split -->
+        <div class="glass rounded-xl p-3">
+          <div class="flex items-center justify-between mb-1">
+            <h2 class="text-xs font-bold text-white uppercase tracking-wide">Sentiment Ratio</h2>
+            <span class="text-[10px] text-slate-400" id="langSplit">HI 0 | EN 0</span>
+          </div>
+          <div class="h-36 flex items-center justify-center">
+            <canvas id="donutChart"></canvas>
+          </div>
+        </div>
+
+        <!-- District Heat Radar -->
+        <div class="glass rounded-xl p-3">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-bold uppercase tracking-wide text-amber-400">District Heat Radar</h3>
+            <span class="text-[10px] text-slate-400">Click to filter</span>
+          </div>
+          <div id="districtStrip" class="flex flex-wrap gap-1.5"></div>
+        </div>
+
+        <!-- Department Radar -->
+        <div class="glass rounded-xl p-3">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-bold uppercase tracking-wide text-sky-400">Department Radar</h3>
+            <span class="text-[10px] text-slate-400">Click to filter</span>
+          </div>
+          <div id="deptStrip" class="flex flex-wrap gap-1.5"></div>
+        </div>
+      </aside>
+
     </div>
   </main>
+
+  <!-- 1-Click WhatsApp Brief Modal -->
+  <div id="briefModal" class="fixed inset-0 z-50 hidden bg-black/75 flex items-center justify-center p-4">
+    <div class="glass rounded-2xl max-w-2xl w-full p-5 space-y-3">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-amber-400">1-Click CMO / Manager WhatsApp Brief</h3>
+        <button onclick="closeBriefModal()" class="text-slate-400 hover:text-white text-sm font-bold">✕ Close</button>
+      </div>
+      <textarea id="briefText" rows="13" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-slate-200 font-mono focus:outline-none"></textarea>
+      <div class="flex justify-end gap-2">
+        <button onclick="copyBrief()" class="px-4 py-2 rounded-lg text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950">Copy for WhatsApp</button>
+      </div>
+    </div>
+  </div>
 
   <script>
     const DEFAULT_KEYWORDS = ["Bhajanlal", "RajCMO", "Rajasthan govt", "Jaipur", "paper leak", "RPSC"];
     let keywords = JSON.parse(localStorage.getItem("rajwatch_kw") || "null") || [...DEFAULT_KEYWORDS];
     let activeKeywordFilter = null;
     let currentSource = "ALL";
-    let riskOnly = false;
+    let sentFilter = null; // null | "negative" | "positive"
+    let selectedDistrict = null;
+    let selectedDept = null;
     let soundOn = true;
     let allItems = [];
+    let latestPayload = null;
     let seenIds = new Set();
     let firstLoad = true;
+    let tvRendered = false;
     let countdown = 25;
+    let hourlyChartObj = null;
+    let donutChartObj = null;
+
+    function esc(s) {
+      return String(s || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    }
 
     function playBeep(isAlert) {
       if (!soundOn) return;
@@ -116,8 +232,8 @@
       const btn = document.getElementById("soundBtn");
       btn.textContent = soundOn ? "Sound: ON" : "Sound: OFF";
       btn.className = soundOn
-        ? "px-3 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 font-semibold"
-        : "px-3 py-1.5 rounded-lg bg-slate-800 text-slate-400 border border-slate-700";
+        ? "px-2.5 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 font-semibold"
+        : "px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-400 border border-slate-700";
       if (soundOn) playBeep(false);
     }
 
@@ -133,19 +249,20 @@
 
     function renderKeywords() {
       const box = document.getElementById("kwChips");
-      box.innerHTML = keywords.map(k => {
+      box.innerHTML = keywords.map((k, idx) => {
         const active = activeKeywordFilter === k;
         return `
           <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs cursor-pointer border ${
             active ? "bg-amber-500 text-slate-950 border-amber-400 font-bold" : "bg-slate-800/90 text-slate-200 border-slate-700 hover:border-sky-500"
-          }" onclick="toggleKeywordFilter('${k.replace(/'/g, "\\'")}')">
-            ${k}
-            <button onclick="removeKeyword(event, '${k.replace(/'/g, "\\'")}')" class="ml-1 text-[10px] opacity-70 hover:opacity-100">✕</button>
+          }" onclick="toggleKeywordFilter(${idx})">
+            ${esc(k)}
+            <button onclick="removeKeyword(event, ${idx})" class="ml-1 text-[10px] opacity-70 hover:opacity-100">✕</button>
           </span>`;
       }).join("");
     }
 
-    function toggleKeywordFilter(k) {
+    function toggleKeywordFilter(idx) {
+      const k = keywords[idx];
       activeKeywordFilter = activeKeywordFilter === k ? null : k;
       renderKeywords();
       renderFeed();
@@ -164,9 +281,10 @@
       inp.value = "";
     }
 
-    function removeKeyword(e, k) {
+    function removeKeyword(e, idx) {
       e.stopPropagation();
-      keywords = keywords.filter(x => x !== k);
+      const k = keywords[idx];
+      keywords.splice(idx, 1);
       if (activeKeywordFilter === k) activeKeywordFilter = null;
       localStorage.setItem("rajwatch_kw", JSON.stringify(keywords));
       renderKeywords();
@@ -177,21 +295,33 @@
       currentSource = src;
       document.querySelectorAll(".src-btn").forEach(b => {
         const active = b.dataset.src === src;
-        b.className = active
-          ? "src-btn px-3 py-1.5 rounded-lg bg-sky-600 text-white font-semibold"
-          : "src-btn px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300";
+        if (b.dataset.src === "LIVE_TV") {
+          b.className = active
+            ? "src-btn px-2.5 py-1.5 rounded-lg bg-rose-600 text-white font-semibold"
+            : "src-btn px-2.5 py-1.5 rounded-lg bg-rose-950/70 border border-rose-600/50 text-rose-300 font-semibold";
+        } else {
+          b.className = active
+            ? "src-btn px-2.5 py-1.5 rounded-lg bg-sky-600 text-white font-semibold"
+            : "src-btn px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-300";
+        }
       });
       renderFeed();
     }
 
-    function toggleRiskOnly() {
-      riskOnly = !riskOnly;
-      const btn = document.getElementById("riskOnlyBtn");
-      btn.className = riskOnly
-        ? "px-3 py-1.5 rounded-lg bg-red-600 text-white font-semibold"
-        : "px-3 py-1.5 rounded-lg bg-red-950/60 border border-red-700/50 text-red-300";
+    function toggleSentFilter(mode) {
+      sentFilter = sentFilter === mode ? null : mode;
+      document.getElementById("negOnlyBtn").className = sentFilter === "negative"
+        ? "px-2.5 py-1.5 rounded-lg bg-red-600 text-white font-semibold"
+        : "px-2.5 py-1.5 rounded-lg bg-red-950/60 border border-red-700/50 text-red-300";
+      document.getElementById("posOnlyBtn").className = sentFilter === "positive"
+        ? "px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold"
+        : "px-2.5 py-1.5 rounded-lg bg-emerald-950/60 border border-emerald-700/50 text-emerald-300";
       renderFeed();
     }
+
+    function selectDistrict(d) { selectedDistrict = selectedDistrict === d ? null : d; renderRadars(); renderFeed(); }
+    function selectDept(dp) { selectedDept = selectedDept === dp ? null : dp; renderRadars(); renderFeed(); }
+    function clearSubFilters() { selectedDistrict = null; selectedDept = null; renderRadars(); renderFeed(); }
 
     function timeAgo(ts) {
       const diff = Math.max(1, Math.floor(Date.now() / 1000 - ts));
@@ -202,7 +332,7 @@
     }
 
     function highlightText(txt) {
-      let safe = txt.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+      let safe = esc(txt);
       keywords.forEach(k => {
         if (k.length < 2) return;
         const re = new RegExp(`(${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
@@ -211,11 +341,115 @@
       return safe;
     }
 
+    function renderCharts(data) {
+      const ctx1 = document.getElementById("hourlyChart").getContext("2d");
+      if (hourlyChartObj) hourlyChartObj.destroy();
+      hourlyChartObj = new Chart(ctx1, {
+        type: "line",
+        data: {
+          labels: data.hourly_chart.labels,
+          datasets: [
+            { label: "Negative", data: data.hourly_chart.negative, borderColor: "#f87171", backgroundColor: "rgba(248,113,113,0.18)", fill: true, tension: 0.35, borderWidth: 2 },
+            { label: "Positive", data: data.hourly_chart.positive, borderColor: "#34d399", backgroundColor: "rgba(52,211,153,0.14)", fill: true, tension: 0.35, borderWidth: 2 },
+            { label: "Neutral", data: data.hourly_chart.neutral, borderColor: "#94a3b8", borderDash: [3, 3], tension: 0.35, borderWidth: 1.3 }
+          ]
+        },
+        options: {
+          animation: false,
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: "#cbd5e1", font: { size: 10 }, boxWidth: 10 } } },
+          scales: {
+            x: { ticks: { color: "#94a3b8", font: { size: 9 } }, grid: { color: "rgba(51,65,85,0.25)" } },
+            y: { beginAtZero: true, ticks: { color: "#94a3b8", font: { size: 9 }, precision: 0 }, grid: { color: "rgba(51,65,85,0.25)" } }
+          }
+        }
+      });
+
+      const ctx2 = document.getElementById("donutChart").getContext("2d");
+      if (donutChartObj) donutChartObj.destroy();
+      donutChartObj = new Chart(ctx2, {
+        type: "doughnut",
+        data: {
+          labels: ["Negative", "Positive", "Neutral"],
+          datasets: [{ data: [data.stats.negative, data.stats.positive, data.stats.neutral], backgroundColor: ["#ef4444", "#10b981", "#64748b"], borderWidth: 0 }]
+        },
+        options: {
+          animation: false,
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: "62%",
+          plugins: { legend: { position: "right", labels: { color: "#cbd5e1", font: { size: 10 }, boxWidth: 10 } } }
+        }
+      });
+    }
+
+    function renderRadars() {
+      if (!latestPayload) return;
+      document.getElementById("districtStrip").innerHTML = (latestPayload.districts || []).map(d => {
+        const active = selectedDistrict === d.name ? "ring-2 ring-amber-400 bg-amber-500/20" : "bg-slate-800/80";
+        const neg = d.negative > 0 ? `<span class="text-red-400 font-bold ml-1">(${d.negative}N)</span>` : "";
+        return `<button onclick="selectDistrict('${esc(d.name)}')" class="px-2 py-1 rounded-md text-[11px] border border-slate-700 text-slate-200 hover:border-amber-400 ${active}">${esc(d.name)}: ${d.total}${neg}</button>`;
+      }).join("");
+
+      document.getElementById("deptStrip").innerHTML = (latestPayload.departments || []).map(dp => {
+        const active = selectedDept === dp.name ? "ring-2 ring-sky-400 bg-sky-500/20" : "bg-slate-800/80";
+        const neg = dp.negative > 0 ? `<span class="text-red-400 font-bold ml-1">(${dp.negative}N)</span>` : "";
+        return `<button onclick="selectDept('${esc(dp.name)}')" class="px-2 py-1 rounded-md text-[11px] border border-slate-700 text-slate-200 hover:border-sky-400 ${active}">${esc(dp.name)}: ${dp.total}${neg}</button>`;
+      }).join("");
+
+      const bar = document.getElementById("subFilterBar");
+      if (selectedDistrict || selectedDept) {
+        const parts = [];
+        if (selectedDistrict) parts.push(`District: ${selectedDistrict}`);
+        if (selectedDept) parts.push(`Dept: ${selectedDept}`);
+        document.getElementById("subFilterText").textContent = "Active Filter → " + parts.join(" | ");
+        bar.classList.remove("hidden");
+      } else {
+        bar.classList.add("hidden");
+      }
+    }
+
     function renderFeed(newIdSet = new Set()) {
+      const tvWall = document.getElementById("liveTvWall");
+      const container = document.getElementById("feed");
+
+      if (currentSource === "LIVE_TV") {
+        container.classList.add("hidden");
+        tvWall.classList.remove("hidden");
+        const streams = (latestPayload && latestPayload.live_tv) || [];
+        document.getElementById("postCount").textContent = `${streams.length} Live TV`;
+        if (!tvRendered && streams.length) {
+          tvWall.innerHTML = streams.map(tv => `
+            <div class="glass rounded-xl overflow-hidden flex flex-col">
+              <div class="aspect-video bg-black">
+                <iframe class="w-full h-full" src="${esc(tv.embed_url)}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+              </div>
+              <div class="p-3 flex items-center justify-between">
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-600 text-white">● LIVE TV</span>
+                <span class="text-xs text-sky-400 font-semibold">${esc(tv.source)}</span>
+              </div>
+            </div>
+          `).join("");
+          tvRendered = true;
+        }
+        return;
+      }
+
+      tvWall.classList.add("hidden");
+      container.classList.remove("hidden");
+
       const q = document.getElementById("instantSearch").value.trim().toLowerCase();
       const filtered = allItems.filter(item => {
-        if (currentSource !== "ALL" && item.source !== currentSource) return false;
-        if (riskOnly && item.risk !== "ALERT") return false;
+        if (currentSource === "X" && item.source !== "X") return false;
+        if (currentSource === "NEWSPAPER" && item.source !== "NEWSPAPER") return false;
+        if (currentSource === "NEWS" && item.source !== "NEWS") return false;
+        if (currentSource === "YOUTUBE" && item.source !== "YOUTUBE") return false;
+        if (currentSource === "HINDI" && item.language !== "Hindi") return false;
+        if (currentSource === "ENGLISH" && item.language !== "English") return false;
+        if (sentFilter && item.sentiment !== sentFilter) return false;
+        if (selectedDistrict && item.district !== selectedDistrict) return false;
+        if (selectedDept && item.department !== selectedDept) return false;
         const hay = (item.text + " " + item.author).toLowerCase();
         if (activeKeywordFilter && !hay.includes(activeKeywordFilter.toLowerCase())) return false;
         if (q && !hay.includes(q)) return false;
@@ -223,7 +457,6 @@
       });
 
       document.getElementById("postCount").textContent = `${filtered.length} posts`;
-      const container = document.getElementById("feed");
       if (!filtered.length) {
         container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400 text-sm">Is filter par abhi koi post nahi mili.</div>`;
         return;
@@ -235,26 +468,93 @@
           ? `<span class="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 font-bold">X LIVE</span>`
           : item.source === "YOUTUBE"
           ? `<span class="px-2 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30 font-bold">YOUTUBE</span>`
-          : `<span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">NEWS</span>`;
-        const riskBadge = item.risk === "ALERT"
-          ? `<span class="px-2 py-0.5 rounded bg-red-600 text-white font-bold">ALERT</span>` : "";
+          : item.source === "NEWSPAPER"
+          ? `<span class="px-2 py-0.5 rounded bg-purple-500/20 text-purple-200 border border-purple-500/40 font-bold">PAPER</span>`
+          : `<span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">${esc(item.language.toUpperCase())} NEWS</span>`;
+
+        const sentBadge = item.sentiment === "negative"
+          ? `<span class="px-2 py-0.5 rounded bg-red-600 text-white font-bold">NEGATIVE</span>`
+          : item.sentiment === "positive"
+          ? `<span class="px-2 py-0.5 rounded bg-emerald-600/80 text-white font-bold">POSITIVE</span>`
+          : "";
+
         const newBadge = isNew
           ? `<span class="px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-extrabold animate-pulse">NEW</span>` : "";
 
+        const borderClass = item.sentiment === "negative"
+          ? "border-red-500/60"
+          : item.sentiment === "positive"
+          ? "border-emerald-500/50"
+          : "border-slate-800";
+
         return `
-          <article class="rounded-xl p-4 bg-[#0f172a] border ${item.risk === "ALERT" ? "border-red-500/50" : "border-slate-800"} hover:border-sky-500/50 transition ${isNew ? "new-flash" : ""}">
-            <div class="flex items-center justify-between gap-2 text-[11px] mb-2">
-              <div class="flex items-center gap-1.5 flex-wrap">${srcBadge} ${riskBadge} ${newBadge}</div>
-              <span class="text-slate-400 font-medium">${timeAgo(item.ts)}</span>
+          <article class="rounded-xl p-4 bg-[#0f172a] border ${borderClass} hover:border-sky-500/50 transition flex flex-col justify-between ${isNew ? "new-flash" : ""}">
+            <div>
+              <div class="flex items-center justify-between gap-2 text-[10px] mb-2">
+                <div class="flex items-center gap-1 flex-wrap">
+                  ${srcBadge} ${sentBadge} ${newBadge}
+                  <span class="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300">${esc(item.district)}</span>
+                </div>
+                <span class="text-emerald-300 font-semibold whitespace-nowrap">${timeAgo(item.ts)}</span>
+              </div>
+              <p class="text-xs font-semibold text-sky-300 mb-1">${esc(item.author)}</p>
+              <p class="text-[13px] text-slate-100 leading-relaxed mb-3 break-words">${highlightText(item.text)}</p>
             </div>
-            <p class="text-xs font-semibold text-sky-300 mb-1">${item.author}</p>
-            <p class="text-sm text-slate-100 leading-relaxed mb-3 break-words">${highlightText(item.text)}</p>
-            <div class="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-800/80">
-              <span>${item.source === "X" ? `❤ ${item.likes} &nbsp; 🔁 ${item.retweets}` : "Real-Time Feed"}</span>
-              <a href="${item.url}" target="_blank" class="text-sky-400 hover:underline font-semibold">Open Original ↗</a>
+            <div class="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-800/80">
+              <span>${item.source === "X" ? `❤ ${item.likes} &nbsp; 🔁 ${item.retweets}` : esc(item.department)} · ${esc(item.time_str)}</span>
+              <a href="${esc(item.url)}" target="_blank" rel="noopener" class="text-sky-400 hover:underline font-semibold">Open ↗</a>
             </div>
           </article>`;
       }).join("");
+    }
+
+    function openBriefModal() {
+      if (!latestPayload) return;
+      const s = latestPayload.stats;
+      const topNeg = allItems.filter(i => i.sentiment === "negative").slice(0, 6);
+      const topPos = allItems.filter(i => i.sentiment === "positive").slice(0, 3);
+      const hotDists = (latestPayload.districts || []).slice(0, 4).map(d => `${d.name} (${d.negative}N)`).join(", ");
+
+      let text = `📊 *RAJWATCH LIVE PRO — DAILY MEDIA & X BRIEF*\n`;
+      text += `🕒 Updated: ${latestPayload.updated_at}\n`;
+      text += `🚨 Crisis Score: ${s.crisis_score}/100\n\n`;
+      text += `📈 *SENTIMENT (Total ${s.total} | X: ${s.x_count} | News: ${s.news_count} | YT: ${s.yt_count})*\n`;
+      text += `🔴 Negative: ${s.negative} (${s.negative_pct}%)\n`;
+      text += `🟢 Positive: ${s.positive} (${s.positive_pct}%)\n`;
+      text += `⚪ Neutral: ${s.neutral} (${s.neutral_pct}%)\n`;
+      text += `📍 Hotspots: ${hotDists}\n\n`;
+      text += `🚨 *TOP NEGATIVE ALERTS:*\n`;
+      topNeg.forEach((n, i) => { text += `${i + 1}. [${n.source} | ${timeAgo(n.ts)} | ${n.author}] ${n.text.slice(0, 140)}\n`; });
+      text += `\n✅ *TOP POSITIVE COVERAGE:*\n`;
+      topPos.forEach((p, i) => { text += `${i + 1}. [${p.author}] ${p.text.slice(0, 140)}\n`; });
+
+      document.getElementById("briefText").value = text;
+      document.getElementById("briefModal").classList.remove("hidden");
+    }
+
+    function closeBriefModal() { document.getElementById("briefModal").classList.add("hidden"); }
+    function copyBrief() {
+      const ta = document.getElementById("briefText");
+      ta.select();
+      navigator.clipboard.writeText(ta.value);
+      alert("WhatsApp Brief copy ho gaya!");
+    }
+
+    function exportCSV() {
+      if (!allItems.length) return;
+      let csv = "\uFEFFTime (IST),Source,Author,Language,Sentiment,District,Department,Text,Link\n";
+      allItems.forEach(i => {
+        const row = [
+          i.time_str, i.source, i.author, i.language, i.sentiment,
+          i.district, i.department, i.text.replace(/"/g, '""'), i.url
+        ].map(v => `"${v}"`).join(",");
+        csv += row + "\n";
+      });
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `RajWatch_Live_Report_${new Date().toISOString().slice(0,10)}.csv`;
+      link.click();
     }
 
     async function fetchFeed(force = false) {
@@ -262,6 +562,17 @@
       try {
         const res = await fetch(`/api/feed?keywords=${encodeURIComponent(keywords.join(","))}&force=${force}`);
         const data = await res.json();
+        latestPayload = data;
+        const s = data.stats;
+
+        document.getElementById("lastUpdated").textContent = `Updated: ${data.updated_at}`;
+        document.getElementById("kpiNeg").textContent = s.negative;
+        document.getElementById("kpiNegPct").textContent = `${s.negative_pct}%`;
+        document.getElementById("kpiPos").textContent = s.positive;
+        document.getElementById("kpiPosPct").textContent = `${s.positive_pct}%`;
+        document.getElementById("kpiTotal").textContent = s.total;
+        document.getElementById("kpiX").textContent = `${s.x_count} X · ${s.yt_count} YT`;
+        document.getElementById("langSplit").textContent = `HI ${s.hindi_count} | EN ${s.english_count}`;
 
         const xBadge = document.getElementById("xBadge");
         const xErr = document.getElementById("xErrorBox");
@@ -270,10 +581,22 @@
           xBadge.className = "px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold";
           xErr.classList.add("hidden");
         } else {
-          xBadge.textContent = "X: Cookies Pending";
+          xBadge.textContent = "X: Warning / Pending";
           xBadge.className = "px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold";
-          xErr.textContent = data.x_error || "News aur YouTube live chal raha hai. X live karne ke liye Render Environment mein X_AUTH_TOKEN aur X_CT0 add karein.";
+          xErr.textContent = data.x_error || "Render Environment mein X_AUTH_TOKEN aur X_CT0 check karein.";
           xErr.classList.remove("hidden");
+        }
+
+        const cb = document.getElementById("crisisBadge");
+        if (s.crisis_score >= 60) {
+          cb.textContent = `Crisis: ${s.crisis_score}/100 (HIGH)`;
+          cb.className = "px-2.5 py-1 rounded-full bg-red-950/80 text-red-300 border border-red-500 font-bold";
+        } else if (s.crisis_score >= 30) {
+          cb.textContent = `Crisis: ${s.crisis_score}/100 (MED)`;
+          cb.className = "px-2.5 py-1 rounded-full bg-amber-950/80 text-amber-300 border border-amber-500 font-bold";
+        } else {
+          cb.textContent = `Crisis: ${s.crisis_score}/100 (SAFE)`;
+          cb.className = "px-2.5 py-1 rounded-full bg-emerald-950/60 text-emerald-300 border border-emerald-600/40 font-bold";
         }
 
         const newIds = new Set();
@@ -285,12 +608,14 @@
             if (!firstLoad) {
               newIds.add(item.id);
               if (!newestItem) newestItem = item;
-              if (item.risk === "ALERT") hasAlert = true;
+              if (item.sentiment === "negative") hasAlert = true;
             }
           }
         });
 
         allItems = data.items;
+        renderCharts(data);
+        renderRadars();
         renderFeed(newIds);
 
         if (!firstLoad && newIds.size > 0) {
