@@ -25,15 +25,18 @@ HEADERS = {
     ),
     "Accept-Language": "hi-IN,hi;q=0.9,en-IN;q=0.8,en;q=0.7",
 }
+YT_HEADERS = {
+    "User-Agent": HEADERS["User-Agent"],
+    "Accept-Language": "en-US,en;q=0.9",
+}
 
-# Public Web App Bearer Token used by x.com frontend
 X_BEARER = (
     "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs"
     "%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA"
 )
 
 FEED_CACHE: Dict[str, Dict[str, Any]] = {}
-CACHE_TTL_SECONDS = 40
+CACHE_TTL_SECONDS = 15
 X_ACCOUNT_INDEX = 0
 CACHED_SEARCH_QID: Dict[str, Any] = {"qid": "nK1dw4oV3k4w5TdtcAdSww", "ts": 0.0}
 
@@ -217,6 +220,39 @@ def parse_twitter_time(raw: str, fallback: datetime) -> datetime:
         return fallback
 
 
+def parse_yt_relative_time(pub_text: str, now_ist: datetime) -> Tuple[datetime, bool]:
+    """Parses both English and Hindi YouTube relative timestamps accurately."""
+    t = (pub_text or "").lower().strip()
+    if not t:
+        return (now_ist - timedelta(hours=4), False)
+
+    m_sec = re.search(r"(\d+)\s*(?:second|sec|सेकंड)", t)
+    if m_sec:
+        return (now_ist - timedelta(seconds=int(m_sec.group(1))), True)
+
+    m_min = re.search(r"(\d+)\s*(?:minute|min|मिनट)", t)
+    if m_min:
+        return (now_ist - timedelta(minutes=int(m_min.group(1))), True)
+
+    m_hr = re.search(r"(\d+)\s*(?:hour|hr|घं|घंट)", t)
+    if m_hr:
+        return (now_ist - timedelta(hours=int(m_hr.group(1))), True)
+
+    m_day = re.search(r"(\d+)\s*(?:day|दिन)", t)
+    if m_day:
+        return (now_ist - timedelta(days=int(m_day.group(1))), True)
+
+    m_wk = re.search(r"(\d+)\s*(?:week|सप्ताह|हफ्त)", t)
+    if m_wk:
+        return (now_ist - timedelta(weeks=int(m_wk.group(1))), True)
+
+    m_mo = re.search(r"(\d+)\s*(?:month|महीन)", t)
+    if m_mo:
+        return (now_ist - timedelta(days=30 * int(m_mo.group(1))), True)
+
+    return (now_ist - timedelta(hours=4), False)
+
+
 def get_x_accounts() -> List[Tuple[str, str]]:
     accounts: List[Tuple[str, str]] = []
     for sfx in ["", "_2", "_3"]:
@@ -252,7 +288,7 @@ def _make_tweet_item(
     retweets: int,
     now_ist: datetime,
 ) -> Dict[str, Any]:
-    dt_ist = parse_twitter_time(created_at, now_ist)
+    dt_ist = parse_twitter_time(created_at, now_ist - timedelta(hours=2))
     sentiment = analyze_sentiment(text)
     return {
         "id": f"x_{tw_id}",
@@ -266,6 +302,7 @@ def _make_tweet_item(
         "district": detect_district(text),
         "department": detect_department(text),
         "published_ts": dt_ist.timestamp(),
+        "is_today": dt_ist.date() == now_ist.date(),
         "hour_ist": dt_ist.hour,
         "time_str": dt_ist.strftime("%I:%M %p"),
         "time_ago": format_time_ago(dt_ist, now_ist),
@@ -457,7 +494,6 @@ async def fetch_x_backup_stream(
     client: httpx.AsyncClient,
     x_query: str,
 ) -> List[Dict[str, Any]]:
-    # Fetches fresh X posts from keyword index + key Rajasthan handles
     handles_q = (
         "(site:x.com/RajCMO OR site:x.com/BhajanlalBjp OR site:x.com/INCRajasthan "
         "OR site:x.com/BJP4Rajasthan OR site:x.com/1stIndiaNews OR site:x.com/News18Rajasthan "
@@ -499,13 +535,11 @@ async def fetch_x_live(
         idx = (X_ACCOUNT_INDEX + attempt) % len(accounts)
         auth_token, ct0 = accounts[idx]
 
-        # Try 1: Direct GraphQL SearchTimeline (no KEY_BYTE crash)
         items, code, err = await fetch_x_graphql(client, x_query, auth_token, ct0)
         if code == 200 and items:
             X_ACCOUNT_INDEX = (idx + 1) % len(accounts)
             return (items, "LIVE", f"X Live Connected ({len(items)} tweets)")
 
-        # Try 2: Direct Adaptive Search API
         items2, code2, err2 = await fetch_x_adaptive(client, x_query, auth_token, ct0)
         if code2 == 200 and items2:
             X_ACCOUNT_INDEX = (idx + 1) % len(accounts)
@@ -519,7 +553,7 @@ async def fetch_x_live(
         return (
             backup,
             "EXPIRED",
-            "X ne 401 Unauthorized diya — auth_token ya ct0 sach mein expire/galat hai. Nayi cookies daalein (abhi Backup X posts chal rahe hain).",
+            "X ne 401 Unauthorized diya — auth_token ya ct0 expire ho gaya hai. Nayi cookies daalein (abhi Backup X posts chal rahe hain).",
         )
     return (
         backup,
@@ -557,7 +591,7 @@ async def fetch_google_news(
                 parts = raw_title.rsplit(" - ", 1)
                 raw_title, source = parts[0].strip(), parts[1].strip()
 
-            dt_ist = parse_rss_datetime(entry, now_ist)
+            dt_ist = parse_rss_datetime(entry, now_ist - timedelta(hours=3))
             sentiment = analyze_sentiment(raw_title)
             items.append(
                 {
@@ -572,6 +606,7 @@ async def fetch_google_news(
                     "district": detect_district(raw_title),
                     "department": detect_department(raw_title),
                     "published_ts": dt_ist.timestamp(),
+                    "is_today": dt_ist.date() == now_ist.date(),
                     "hour_ist": dt_ist.hour,
                     "time_str": dt_ist.strftime("%I:%M %p"),
                     "time_ago": format_time_ago(dt_ist, now_ist),
@@ -613,13 +648,14 @@ async def fetch_youtube_search(
     limit: int = 12,
 ) -> List[Dict[str, Any]]:
     encoded_q = urllib.parse.quote(query)
-    sp = "EgJAAQ%3D%3D" if live_only else "EgIIAg%3D%3D"
+    # EgJAAQ%3D%3D = Live right now | CAI%3D = Strictly Sorted by Upload Date (Newest First)
+    sp = "EgJAAQ%3D%3D" if live_only else "CAI%3D"
     url = f"https://www.youtube.com/results?search_query={encoded_q}&sp={sp}"
 
     output: List[Dict[str, Any]] = []
     now_ist = datetime.now(IST)
     try:
-        resp = await client.get(url, headers=HEADERS, timeout=12.0, follow_redirects=True)
+        resp = await client.get(url, headers=YT_HEADERS, timeout=12.0, follow_redirects=True)
         if resp.status_code != 200:
             return output
 
@@ -645,13 +681,15 @@ async def fetch_youtube_search(
             pub_text = clean_text(_extract_yt_text(r.get("publishedTimeText")))
             view_text = clean_text(_extract_yt_text(r.get("shortViewCountText")))
 
-            est_dt = now_ist
-            m_min = re.search(r"(\d+)\s*minute", pub_text.lower())
-            m_hr = re.search(r"(\d+)\s*hour", pub_text.lower())
-            if m_min:
-                est_dt = now_ist - timedelta(minutes=int(m_min.group(1)))
-            elif m_hr:
-                est_dt = now_ist - timedelta(hours=int(m_hr.group(1)))
+            if live_only:
+                est_dt = now_ist
+                time_ago_label = "LIVE NOW"
+            else:
+                est_dt, parsed_ok = parse_yt_relative_time(pub_text, now_ist)
+                # Skip videos older than 24 hours in regular live feed
+                if (now_ist.timestamp() - est_dt.timestamp()) > 86400:
+                    continue
+                time_ago_label = format_time_ago(est_dt, now_ist) if parsed_ok else "Live Stream"
 
             sentiment = analyze_sentiment(title)
             output.append(
@@ -667,9 +705,10 @@ async def fetch_youtube_search(
                     "district": detect_district(title),
                     "department": detect_department(title),
                     "published_ts": est_dt.timestamp(),
+                    "is_today": est_dt.date() == now_ist.date(),
                     "hour_ist": est_dt.hour,
                     "time_str": "LIVE TV" if live_only else est_dt.strftime("%I:%M %p"),
-                    "time_ago": "LIVE NOW" if live_only else (pub_text or "Today"),
+                    "time_ago": time_ago_label,
                     "metrics": view_text,
                     "video_id": vid,
                 }
@@ -742,16 +781,21 @@ async def get_feed(
         else:
             all_items.extend(res)
 
+    now_ist = datetime.now(IST)
+    cutoff_ts = now_ist.timestamp() - 86400
+
+    # Strictly sort newest first (minutes ago at top) & keep last 24h only
     deduped: List[Dict[str, Any]] = []
     seen_titles = set()
     for item in sorted(all_items, key=lambda x: x["published_ts"], reverse=True):
+        if item["published_ts"] < cutoff_ts:
+            continue
         key = re.sub(r"\W+", "", item["title"].lower())[:55]
         if not key or key in seen_titles:
             continue
         seen_titles.add(key)
         deduped.append(item)
 
-    now_ist = datetime.now(IST)
     hours_range = list(range(0, now_ist.hour + 1))
     hourly_pos = {h: 0 for h in hours_range}
     hourly_neg = {h: 0 for h in hours_range}
@@ -785,14 +829,16 @@ async def get_feed(
         else:
             eng_total += 1
 
-        h = item["hour_ist"]
-        if h in hourly_pos:
-            if s == "positive":
-                hourly_pos[h] += 1
-            elif s == "negative":
-                hourly_neg[h] += 1
-            else:
-                hourly_neu[h] += 1
+        # Plot ONLY today's IST stories on today's hourly chart
+        if item.get("is_today"):
+            h = item["hour_ist"]
+            if h in hourly_pos:
+                if s == "positive":
+                    hourly_pos[h] += 1
+                elif s == "negative":
+                    hourly_neg[h] += 1
+                else:
+                    hourly_neu[h] += 1
 
         d = item["district"]
         if d not in district_stats:
