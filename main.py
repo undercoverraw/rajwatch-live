@@ -1,8 +1,10 @@
 import asyncio
 import email.utils
 import html
+import json
 import os
 import re
+import tempfile
 import time
 import urllib.parse
 from datetime import datetime, timedelta, timezone
@@ -15,7 +17,7 @@ from fastapi import FastAPI, Query
 from fastapi.responses import FileResponse
 from twikit import Client
 
-app = FastAPI(title="RajWatch Live Pro - Open Source")
+app = FastAPI(title="CIU Watch — Real-Time Media & X Intelligence")
 
 IST = timezone(timedelta(hours=5, minutes=30))
 HEADERS = {
@@ -138,6 +140,42 @@ DEPARTMENTS = {
     ],
 }
 
+# Persistent rolling store so tweets NEVER disappear on refresh
+STORE_FILE = Path(tempfile.gettempdir()) / "ciuwatch_live_store.json"
+LIVE_TWEET_STORE: Dict[str, Dict[str, Any]] = {}
+ARCHIVE_X_CACHE: Dict[str, Dict[str, Any]] = {}
+LAST_X_POLL: Dict[str, Any] = {"query": "", "ts": 0.0, "status": "idle", "error": ""}
+DAILY_TRACKER: Dict[str, Any] = {"date": "", "items": {}}
+LIVE_TV_CACHE: Dict[str, Any] = {"ts": 0.0, "streams": []}
+cookie_turn = 0
+
+
+def load_persisted_store():
+    try:
+        if STORE_FILE.exists():
+            data = json.loads(STORE_FILE.read_text(encoding="utf-8"))
+            if isinstance(data.get("tweets"), dict):
+                LIVE_TWEET_STORE.update(data["tweets"])
+            if isinstance(data.get("daily"), dict):
+                DAILY_TRACKER["date"] = data["daily"].get("date", "")
+                DAILY_TRACKER["items"] = data["daily"].get("items", {})
+    except Exception:
+        pass
+
+
+def save_persisted_store():
+    try:
+        payload = {
+            "tweets": LIVE_TWEET_STORE,
+            "daily": DAILY_TRACKER,
+        }
+        STORE_FILE.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+
+load_persisted_store()
+
 
 def get_cookie_pool():
     pool = []
@@ -147,13 +185,6 @@ def get_cookie_pool():
         if auth and ct0:
             pool.append({"auth_token": auth, "ct0": ct0})
     return pool
-
-
-# Cache keyed by (query + date) so Live and Back-Date queries never collide
-x_cache: Dict[str, Dict[str, Any]] = {}
-cookie_turn = 0
-DAILY_TRACKER: Dict[str, Any] = {"date": "", "items": {}}
-LIVE_TV_CACHE: Dict[str, Any] = {"ts": 0.0, "streams": []}
 
 
 def clean_text(raw: str) -> str:
@@ -193,11 +224,35 @@ def detect_department(text: str) -> str:
     return "General / Admin"
 
 
-def parse_timestamp(date_str: str) -> float:
+def parse_timestamp(date_val: Any, default_now: bool = False) -> float:
     now_ts = time.time()
-    if not date_str:
-        return now_ts - 1800
-    s = str(date_str).strip()
+    fallback = now_ts if default_now else (now_ts - 1800)
+    if not date_val:
+        return fallback
+    if isinstance(date_val, datetime):
+        dt = date_val if date_val.tzinfo else date_val.replace(tzinfo=timezone.utc)
+        return min(dt.timestamp(), now_ts)
+
+    s = str(date_val).strip()
+    if not s:
+        return fallback
+
+    # Twitter exact format first: "Wed Nov 25 11:30:00 +0000 2026"
+    for fmt in (
+        "%a %b %d %H:%M:%S %z %Y",
+        "%Y-%m-%dT%H:%M:%S.%fZ",
+        "%Y-%m-%dT%H:%M:%SZ",
+        "%Y-%m-%d %H:%M:%S%z",
+        "%Y-%m-%d %H:%M:%S",
+    ):
+        try:
+            dt = datetime.strptime(s, fmt)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return min(dt.timestamp(), now_ts)
+        except Exception:
+            continue
+
     try:
         dt = email.utils.parsedate_to_datetime(s)
         if dt.tzinfo is None:
@@ -205,18 +260,14 @@ def parse_timestamp(date_str: str) -> float:
         return min(dt.timestamp(), now_ts)
     except Exception:
         pass
+
     try:
         dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return min(dt.timestamp(), now_ts)
     except Exception:
-        pass
-    try:
-        dt = datetime.strptime(s, "%a %b %d %H:%M:%S %z %Y")
-        return min(dt.timestamp(), now_ts)
-    except Exception:
-        return now_ts - 1800
+        return fallback
 
 
 def enrich_item(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -240,7 +291,6 @@ def enrich_item(item: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def validate_date(date_str: str) -> Optional[Tuple[str, str]]:
-    """Returns (target_date, next_date) in YYYY-MM-DD format if valid past/specific date."""
     s = (date_str or "").strip()
     if not s:
         return None
@@ -252,16 +302,34 @@ def validate_date(date_str: str) -> Optional[Tuple[str, str]]:
         return None
 
 
-# EXACT WORKING X FETCHER (twifork) + Back-Date (since: / until:) support
+def prune_live_tweet_store(now_ts: float):
+    cutoff = now_ts - 86400
+    old_ids = [tid for tid, tw in LIVE_TWEET_STORE.items() if tw.get("ts", 0) < cutoff]
+    for tid in old_ids:
+        LIVE_TWEET_STORE.pop(tid, None)
+    if len(LIVE_TWEET_STORE) > 500:
+        sorted_ids = sorted(LIVE_TWEET_STORE.keys(), key=lambda k: LIVE_TWEET_STORE[k].get("ts", 0))
+        for tid in sorted_ids[: len(LIVE_TWEET_STORE) - 500]:
+            LIVE_TWEET_STORE.pop(tid, None)
+
+
+def get_stored_live_tweets(now_ts: float) -> List[Dict[str, Any]]:
+    prune_live_tweet_store(now_ts)
+    return sorted(LIVE_TWEET_STORE.values(), key=lambda x: x["ts"], reverse=True)
+
+
+# EXACT WORKING X FETCHER (twifork) + MERGE STORE (Tweets NEVER vanish on refresh!)
 async def fetch_x_tweets(
     keywords: list[str],
     force: bool = False,
     date_window: Optional[Tuple[str, str]] = None,
 ):
     global cookie_turn
+    now = time.time()
     pool = get_cookie_pool()
     if not pool:
-        return [], "no_cookies", "Render Environment mein X_AUTH_TOKEN aur X_CT0 add karein"
+        existing = [] if date_window else get_stored_live_tweets(now)
+        return existing, "no_cookies", "Render Environment mein X_AUTH_TOKEN aur X_CT0 add karein"
 
     clean_kw = [k.strip() for k in keywords if k.strip()][:7]
     if not clean_kw:
@@ -271,17 +339,17 @@ async def fetch_x_tweets(
     if date_window:
         start_d, end_d = date_window
         query_str = f"{base_q} since:{start_d} until:{end_d}"
+        cached = ARCHIVE_X_CACHE.get(query_str)
+        min_gap = 20 if force else 120
+        if cached and (now - cached["ts"]) < min_gap and cached["items"]:
+            return cached["items"], f"live ({len(pool)} acc)", ""
         fetch_count = 35
-        min_gap = 20 if force else 120  # Cache archive dates longer to protect rate limits
     else:
         query_str = base_q
-        fetch_count = 20
         min_gap = 12 if force else 22
-
-    now = time.time()
-    cached = x_cache.get(query_str)
-    if cached and (now - cached["ts"]) < min_gap and cached["items"]:
-        return cached["items"], f"live ({len(pool)} acc)", ""
+        if LAST_X_POLL["query"] == query_str and (now - LAST_X_POLL["ts"]) < min_gap and LIVE_TWEET_STORE:
+            return get_stored_live_tweets(now), f"live ({len(pool)} acc)", ""
+        fetch_count = 20
 
     creds = pool[cookie_turn % len(pool)]
     cookie_turn += 1
@@ -290,37 +358,58 @@ async def fetch_x_tweets(
         client = Client("en-US")
         client.set_cookies(creds)
         tweets = await client.search_tweet(query_str, "Latest", count=fetch_count)
-        results = []
-        for t in tweets:
+        fresh_results = []
+        for t in tweets or []:
             text = getattr(t, "text", "") or ""
+            if not text:
+                continue
             user = getattr(t, "user", None)
             handle = getattr(user, "screen_name", "unknown") if user else "unknown"
             name = getattr(user, "name", handle) if user else handle
             tid = str(getattr(t, "id", ""))
-            created = getattr(t, "created_at", "")
-            ts = parse_timestamp(str(created))
-            results.append(enrich_item({
+            if not tid:
+                continue
+            created_dt = getattr(t, "created_at_datetime", None)
+            created_raw = created_dt if created_dt is not None else getattr(t, "created_at", "")
+            ts = parse_timestamp(created_raw, default_now=(date_window is None))
+            fresh_results.append(enrich_item({
                 "id": f"x_{tid}",
                 "source": "X",
                 "author": f"{name} (@{handle})",
                 "handle": f"@{handle}",
                 "text": text,
-                "url": f"https://x.com/{handle}/status/{tid}" if tid else "https://x.com",
+                "url": f"https://x.com/{handle}/status/{tid}",
                 "ts": ts,
                 "likes": getattr(t, "favorite_count", 0) or 0,
                 "retweets": getattr(t, "retweet_count", 0) or 0,
             }))
 
-        # Keep cache size bounded
-        if len(x_cache) > 25:
-            oldest_q = sorted(x_cache.keys(), key=lambda k: x_cache[k]["ts"])[0]
-            x_cache.pop(oldest_q, None)
-        x_cache[query_str] = {"ts": now, "items": results}
-        return results, f"live ({len(pool)} acc)", ""
+        if date_window:
+            # Never overwrite existing cached archive tweets with an empty list
+            if fresh_results:
+                if len(ARCHIVE_X_CACHE) > 25:
+                    oldest_q = sorted(ARCHIVE_X_CACHE.keys(), key=lambda k: ARCHIVE_X_CACHE[k]["ts"])[0]
+                    ARCHIVE_X_CACHE.pop(oldest_q, None)
+                ARCHIVE_X_CACHE[query_str] = {"ts": now, "items": fresh_results}
+                return fresh_results, f"live ({len(pool)} acc)", ""
+            cached = ARCHIVE_X_CACHE.get(query_str)
+            return (cached["items"] if cached else []), f"live ({len(pool)} acc)", ""
+        else:
+            # MERGE new tweets into rolling LIVE_TWEET_STORE (never erase old tweets!)
+            for tw in fresh_results:
+                LIVE_TWEET_STORE[tw["id"]] = tw
+            LAST_X_POLL.update({"query": query_str, "ts": now, "status": f"live ({len(pool)} acc)", "error": ""})
+            if fresh_results:
+                save_persisted_store()
+            return get_stored_live_tweets(now), f"live ({len(pool)} acc)", ""
+
     except Exception as e:
         err_msg = str(e)[:140]
-        fallback = cached["items"] if cached else []
-        return fallback, "warning", f"X temporary error: {err_msg}"
+        if date_window:
+            cached = ARCHIVE_X_CACHE.get(query_str)
+            return (cached["items"] if cached else []), "warning", f"X temporary error: {err_msg}"
+        # Keep showing all previously fetched live tweets even during a temporary X hiccup!
+        return get_stored_live_tweets(now), "warning", f"X temporary error (purane tweets safe hain): {err_msg}"
 
 
 async def fetch_google_news(
@@ -515,7 +604,6 @@ async def api_feed(
 
     async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as http:
         if is_archive:
-            # Back-date mode: fetch X + Hindi/English News strictly for selected date
             x_res, news_en, news_hi = await asyncio.gather(
                 fetch_x_tweets(kw_list, force=force, date_window=date_window),
                 fetch_google_news(http, kw_list, lang="en", date_window=date_window),
@@ -524,7 +612,6 @@ async def api_feed(
             papers, yt_items = [], []
             live_tv = LIVE_TV_CACHE["streams"] or await resolve_live_tv(http, [], force=False)
         else:
-            # Live mode: fetch X + News + Newspapers + YouTube + Live TV
             x_res, news_en, news_hi, papers, yt_items = await asyncio.gather(
                 fetch_x_tweets(kw_list, force=force, date_window=None),
                 fetch_google_news(http, kw_list, lang="en", date_window=None),
@@ -535,64 +622,114 @@ async def api_feed(
             live_tv = await resolve_live_tv(http, yt_items, force=force)
 
     x_items, x_status, x_error = x_res
-    raw_items = x_items + news_hi + news_en + papers + yt_items
-
     cutoff = now_ist.timestamp() - 86400
-    deduped = []
-    seen_keys = set()
-    for it in sorted(raw_items, key=lambda x: x["ts"], reverse=True):
+
+    # Deduplicate X tweets by unique tweet ID (so tweets are NEVER dropped by title similarity!)
+    deduped_x = []
+    seen_x_ids = set()
+    for tw in sorted(x_items, key=lambda x: x["ts"], reverse=True):
+        if not is_archive and tw["ts"] < cutoff:
+            continue
+        if tw["id"] in seen_x_ids:
+            continue
+        seen_x_ids.add(tw["id"])
+        deduped_x.append(tw)
+
+    # Deduplicate News / Papers / YouTube separately
+    deduped_media = []
+    seen_media = set()
+    for it in sorted(news_hi + news_en + papers + yt_items, key=lambda x: x["ts"], reverse=True):
         if not is_archive and it["ts"] < cutoff:
             continue
         k = f"{it['source']}_{re.sub(r'[^a-zA-Z0-9\u0900-\u097F]+', '', it['text'].lower())[:50]}"
-        if not k or k in seen_keys:
+        if not k or k in seen_media:
             continue
-        seen_keys.add(k)
-        deduped.append(it)
+        seen_media.add(k)
+        deduped_media.append(it)
 
-    # Hourly Chart: 00:00..23:00 for back-date, or rolling today tracker for Live mode
+    # Keep ALL stored X tweets (up to 150) + media (up to 120) so news never pushes tweets out!
+    deduped = sorted(deduped_x[:150] + deduped_media[:120], key=lambda x: x["ts"], reverse=True)
+
+    # Hourly Charts (Both ALL Media+X and ONLY X Tweets)
     if is_archive:
         hours_range = list(range(0, 24))
         h_pos = {h: 0 for h in hours_range}
         h_neg = {h: 0 for h in hours_range}
         h_neu = {h: 0 for h in hours_range}
+        hx_pos = {h: 0 for h in hours_range}
+        hx_neg = {h: 0 for h in hours_range}
+        hx_neu = {h: 0 for h in hours_range}
+        x_today_count = 0
+
         for it in deduped:
             h = it["hour_ist"]
-            if it["sentiment"] == "positive":
+            s = it["sentiment"]
+            if s == "positive":
                 h_pos[h] += 1
-            elif it["sentiment"] == "negative":
+            elif s == "negative":
                 h_neg[h] += 1
             else:
                 h_neu[h] += 1
+
+            if it["source"] == "X":
+                x_today_count += 1
+                if s == "positive":
+                    hx_pos[h] += 1
+                elif s == "negative":
+                    hx_neg[h] += 1
+                else:
+                    hx_neu[h] += 1
     else:
         if DAILY_TRACKER["date"] != today_str:
             DAILY_TRACKER["date"] = today_str
             DAILY_TRACKER["items"] = {}
+
         for it in deduped:
             if it["date_ist"] == today_str:
                 DAILY_TRACKER["items"][it["id"]] = {
                     "hour": it["hour_ist"],
                     "sentiment": it["sentiment"],
+                    "source": it["source"],
                 }
-        if len(DAILY_TRACKER["items"]) > 1000:
-            for old_k in list(DAILY_TRACKER["items"].keys())[:200]:
+
+        if len(DAILY_TRACKER["items"]) > 1500:
+            for old_k in list(DAILY_TRACKER["items"].keys())[:300]:
                 DAILY_TRACKER["items"].pop(old_k, None)
+        save_persisted_store()
 
         hours_range = list(range(0, now_ist.hour + 1))
         h_pos = {h: 0 for h in hours_range}
         h_neg = {h: 0 for h in hours_range}
         h_neu = {h: 0 for h in hours_range}
+        hx_pos = {h: 0 for h in hours_range}
+        hx_neg = {h: 0 for h in hours_range}
+        hx_neu = {h: 0 for h in hours_range}
+        x_today_count = 0
+
         for rec in DAILY_TRACKER["items"].values():
-            h = rec["hour"]
+            h = rec.get("hour", 0)
+            s = rec.get("sentiment", "neutral")
+            src = rec.get("source", "")
             if h in h_pos:
-                if rec["sentiment"] == "positive":
+                if s == "positive":
                     h_pos[h] += 1
-                elif rec["sentiment"] == "negative":
+                elif s == "negative":
                     h_neg[h] += 1
                 else:
                     h_neu[h] += 1
 
+                if src == "X":
+                    x_today_count += 1
+                    if s == "positive":
+                        hx_pos[h] += 1
+                    elif s == "negative":
+                        hx_neg[h] += 1
+                    else:
+                        hx_neu[h] += 1
+
     # Stats, Districts, Departments & Account-Wise Bifurcation
     pos_total = neg_total = neu_total = 0
+    x_pos = x_neg = x_neu = 0
     x_total = hi_total = en_total = yt_total = np_total = 0
     district_stats: Dict[str, Dict[str, int]] = {}
     dept_stats: Dict[str, Dict[str, int]] = {}
@@ -610,6 +747,12 @@ async def api_feed(
         src = it["source"]
         if src == "X":
             x_total += 1
+            if s == "positive":
+                x_pos += 1
+            elif s == "negative":
+                x_neg += 1
+            else:
+                x_neu += 1
         elif src == "YOUTUBE":
             yt_total += 1
         elif src in ("NEWS", "NEWSPAPER"):
@@ -636,7 +779,6 @@ async def api_feed(
         elif s == "positive":
             dept_stats[dp]["positive"] += 1
 
-        # Account-Wise Positive/Negative Bifurcation
         acc_key = f"{src}::{it['author']}"
         if acc_key not in account_stats:
             account_stats[acc_key] = {
@@ -700,11 +842,15 @@ async def api_feed(
         "stats": {
             "total": len(deduped),
             "x_count": x_total,
+            "x_today_count": x_today_count,
             "news_count": np_total,
             "yt_count": yt_total,
             "positive": pos_total,
             "negative": neg_total,
             "neutral": neu_total,
+            "x_positive": x_pos,
+            "x_negative": x_neg,
+            "x_neutral": x_neu,
             "positive_pct": pos_pct,
             "negative_pct": neg_pct,
             "neutral_pct": neu_pct,
@@ -718,6 +864,12 @@ async def api_feed(
             "negative": [h_neg[h] for h in hours_range],
             "neutral": [h_neu[h] for h in hours_range],
         },
+        "hourly_chart_x": {
+            "labels": [f"{h:02d}:00" for h in hours_range],
+            "positive": [hx_pos[h] for h in hours_range],
+            "negative": [hx_neg[h] for h in hours_range],
+            "neutral": [hx_neu[h] for h in hours_range],
+        },
         "districts": sorted(
             [{"name": k, **v} for k, v in district_stats.items()],
             key=lambda x: (x["negative"], x["total"]),
@@ -730,5 +882,5 @@ async def api_feed(
         ),
         "accounts": accounts_list,
         "live_tv": live_tv,
-        "items": deduped[:160],
+        "items": deduped,
     }
