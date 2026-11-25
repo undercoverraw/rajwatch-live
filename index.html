@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RajWatch Live Pro — Rajasthan 360° Command Center</title>
+  <title>CIU WATCH — Real-Time 360° Media &amp; X Command Center</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
@@ -25,10 +25,11 @@
       <div class="flex items-center gap-2.5">
         <span id="liveDot" class="h-3 w-3 rounded-full bg-emerald-400 animate-pulse"></span>
         <div>
-          <h1 class="text-lg font-bold tracking-wide text-white leading-tight">
-            RAJWATCH <span class="text-sky-400">LIVE PRO</span>
+          <h1 class="text-lg font-extrabold tracking-wider text-white leading-tight">
+            CIU <span class="text-sky-400">WATCH</span>
+            <span class="text-[10px] font-bold ml-1.5 px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30">LIVE RADAR</span>
           </h1>
-          <p class="text-[11px] text-slate-400" id="lastUpdated">Real-Time X, News, Live TV &amp; Account Analytics</p>
+          <p class="text-[11px] text-slate-400" id="lastUpdated">Real-Time X, News, Live TV &amp; Account Intelligence</p>
         </div>
       </div>
 
@@ -44,11 +45,24 @@
           </button>
         </div>
 
+        <!-- Custom Refresh Interval Selector (30s / 1m / 2m / 5m / Manual) -->
+        <div id="intervalBox" class="flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1">
+          <span class="text-[10px] text-slate-400">Refresh:</span>
+          <select id="intervalSelect" onchange="changeInterval()" class="bg-slate-900 text-sky-300 text-xs font-bold focus:outline-none cursor-pointer">
+            <option value="30">30 sec</option>
+            <option value="60">1 min</option>
+            <option value="120">2 min</option>
+            <option value="300">5 min</option>
+            <option value="0">Manual</option>
+          </select>
+          <span id="timerPill" class="text-slate-200 text-[11px] pl-1.5 border-l border-slate-700">
+            <b id="timer">30</b>s
+          </span>
+        </div>
+
         <span id="xBadge" class="px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">Connecting...</span>
         <span id="crisisBadge" class="px-2.5 py-1 rounded-full bg-emerald-950/60 text-emerald-300 border border-emerald-600/40 font-bold">Crisis: 0/100</span>
-        <span id="timerPill" class="px-2.5 py-1 rounded-full bg-slate-800 text-sky-300 border border-slate-700">
-          Scan: <b id="timer">25</b>s
-        </span>
+
         <button id="soundBtn" onclick="toggleSound()" class="px-2.5 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 font-semibold">
           Sound: ON
         </button>
@@ -82,7 +96,7 @@
   <main class="max-w-[1550px] mx-auto px-4 py-4">
     <!-- Archive Back-Date Mode Banner -->
     <div id="archiveBanner" class="hidden mb-3 px-4 py-2.5 rounded-xl bg-amber-500/15 border border-amber-400/50 text-amber-200 text-xs flex flex-wrap items-center justify-between gap-2">
-      <span>📅 <b id="archiveDateText">Back-Date Mode</b> — Is din ke tweets aur news dikh rahe hain (auto-scan paused hai).</span>
+      <span>📅 <b id="archiveDateText">Back-Date Mode</b> — Is din ke tweets aur news dikh rahe hain (auto-refresh paused hai).</span>
       <button onclick="resetToLive()" class="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold">
         Return to Live Feed ↗
       </button>
@@ -168,7 +182,7 @@
 
         <!-- LIVE FEED STREAM -->
         <div id="feed" class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div class="col-span-full text-center py-12 text-slate-400 text-sm">Loading live Rajasthan feeds...</div>
+          <div class="col-span-full text-center py-12 text-slate-400 text-sm">Loading live CIU Watch feeds...</div>
         </div>
       </div>
 
@@ -192,10 +206,17 @@
           </div>
         </div>
 
+        <!-- Full-Day Sentiment Graph with All / Only X Toggle -->
         <div class="glass rounded-xl p-3">
-          <div class="flex items-center justify-between mb-1.5">
-            <h2 id="chartTitle" class="text-xs font-bold text-white uppercase tracking-wide">Full-Day Govt Sentiment (IST)</h2>
-            <span class="text-[10px] text-slate-400">Red=Neg | Green=Pos</span>
+          <div class="flex items-center justify-between gap-2 mb-1.5">
+            <div>
+              <h2 id="chartTitle" class="text-xs font-bold text-white uppercase tracking-wide">Full-Day Sentiment (IST)</h2>
+              <p class="text-[10px] text-sky-400" id="graphXCount">X tweets counted in graph: 0</p>
+            </div>
+            <div class="flex items-center gap-1 bg-slate-900 p-0.5 rounded-lg border border-slate-700 text-[10px]">
+              <button onclick="setGraphScope('ALL')" id="gScopeALL" class="px-2 py-0.5 rounded bg-sky-600 text-white font-bold">All</button>
+              <button onclick="setGraphScope('X')" id="gScopeX" class="px-2 py-0.5 rounded text-slate-300 font-bold">Only X</button>
+            </div>
           </div>
           <div class="h-48">
             <canvas id="hourlyChart"></canvas>
@@ -204,7 +225,7 @@
 
         <div class="glass rounded-xl p-3">
           <div class="flex items-center justify-between mb-1">
-            <h2 class="text-xs font-bold text-white uppercase tracking-wide">Sentiment Ratio</h2>
+            <h2 class="text-xs font-bold text-white uppercase tracking-wide" id="donutTitle">Sentiment Ratio (All)</h2>
             <span class="text-[10px] text-slate-400" id="langSplit">HI 0 | EN 0</span>
           </div>
           <div class="h-36 flex items-center justify-center">
@@ -236,7 +257,7 @@
   <div id="briefModal" class="fixed inset-0 z-50 hidden bg-black/75 flex items-center justify-center p-4">
     <div class="glass rounded-2xl max-w-2xl w-full p-5 space-y-3">
       <div class="flex items-center justify-between">
-        <h3 class="text-base font-bold text-amber-400">1-Click CMO / Manager WhatsApp Brief</h3>
+        <h3 class="text-base font-bold text-amber-400">CIU Watch — 1-Click WhatsApp Brief</h3>
         <button onclick="closeBriefModal()" class="text-slate-400 hover:text-white text-sm font-bold">✕ Close</button>
       </div>
       <textarea id="briefText" rows="13" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-slate-200 font-mono focus:outline-none"></textarea>
@@ -249,26 +270,77 @@
   <script>
     const DEFAULT_KEYWORDS = ["Bhajanlal", "RajCMO", "Rajasthan govt", "Jaipur", "paper leak", "RPSC"];
     let keywords = JSON.parse(localStorage.getItem("rajwatch_kw") || "null") || [...DEFAULT_KEYWORDS];
+    let scanInterval = parseInt(localStorage.getItem("ciuwatch_interval") || "30", 10);
+    if (![0, 30, 60, 120, 300].includes(scanInterval)) scanInterval = 30;
+    let countdown = scanInterval || 30;
+
     let activeKeywordFilter = null;
     let currentSource = "ALL";
-    let accSourceFilter = "ALL"; // ALL | X | MEDIA
+    let accSourceFilter = "ALL";
+    let graphScope = "ALL"; // ALL | X
     let sentFilter = null;
     let selectedDistrict = null;
     let selectedDept = null;
     let selectedAccount = null;
-    let selectedDate = ""; // "" = Live mode, "YYYY-MM-DD" = Back-Date mode
+    let selectedDate = "";
     let soundOn = true;
     let allItems = [];
     let latestPayload = null;
     let seenIds = new Set();
     let firstLoad = true;
     let tvRendered = false;
-    let countdown = 25;
     let hourlyChartObj = null;
     let donutChartObj = null;
 
+    // Browser-side safety net for today's X tweets (even if server restarts, tweets stay visible)
+    function loadBrowserXBackup(todayStr) {
+      try {
+        const raw = JSON.parse(localStorage.getItem("ciuwatch_x_backup") || "{}");
+        if (raw.date === todayStr && Array.isArray(raw.tweets)) return raw.tweets;
+      } catch (e) {}
+      return [];
+    }
+
+    function saveBrowserXBackup(todayStr, xTweets) {
+      try {
+        localStorage.setItem("ciuwatch_x_backup", JSON.stringify({
+          date: todayStr,
+          tweets: xTweets.slice(0, 150)
+        }));
+      } catch (e) {}
+    }
+
     function esc(s) {
       return String(s || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    }
+
+    function initIntervalUI() {
+      const sel = document.getElementById("intervalSelect");
+      sel.value = String(scanInterval);
+      const pill = document.getElementById("timerPill");
+      if (scanInterval === 0) {
+        pill.innerHTML = `<span class="text-amber-300 font-bold">Paused</span>`;
+      } else {
+        pill.innerHTML = `<b id="timer">${countdown}</b>s`;
+      }
+    }
+
+    function changeInterval() {
+      scanInterval = parseInt(document.getElementById("intervalSelect").value, 10);
+      localStorage.setItem("ciuwatch_interval", String(scanInterval));
+      countdown = scanInterval || 30;
+      initIntervalUI();
+    }
+
+    function setGraphScope(scope) {
+      graphScope = scope;
+      document.getElementById("gScopeALL").className = scope === "ALL"
+        ? "px-2 py-0.5 rounded bg-sky-600 text-white font-bold"
+        : "px-2 py-0.5 rounded text-slate-300 font-bold";
+      document.getElementById("gScopeX").className = scope === "X"
+        ? "px-2 py-0.5 rounded bg-sky-600 text-white font-bold"
+        : "px-2 py-0.5 rounded text-slate-300 font-bold";
+      if (latestPayload) renderCharts(latestPayload);
     }
 
     function playBeep(isAlert) {
@@ -302,7 +374,7 @@
       Notification.requestPermission().then(p => {
         if (p === "granted") {
           document.getElementById("notifBtn").textContent = "Popup: ON";
-          new Notification("RajWatch Live Ready", { body: "Naya Rajasthan update aate hi popup milega!" });
+          new Notification("CIU Watch Ready", { body: "Naya update aate hi popup milega!" });
         }
       });
     }
@@ -323,7 +395,7 @@
       selectedAccount = null;
       firstLoad = true;
       seenIds.clear();
-      countdown = 25;
+      countdown = scanInterval || 30;
       fetchFeed(true);
     }
 
@@ -461,20 +533,25 @@
     }
 
     function renderCharts(data) {
+      const useX = graphScope === "X";
+      const chartData = useX ? data.hourly_chart_x : data.hourly_chart;
+
       document.getElementById("chartTitle").textContent = data.mode === "archive"
-        ? `Hourly Sentiment (${data.active_date} IST)`
-        : "Full-Day Govt Sentiment (IST)";
+        ? `${useX ? "Only X" : "All"} Sentiment (${data.active_date})`
+        : `${useX ? "Only X Tweets" : "Full-Day All"} Sentiment (IST)`;
+      document.getElementById("graphXCount").textContent = `X tweets counted in graph: ${data.stats.x_today_count}`;
+      document.getElementById("donutTitle").textContent = useX ? "Sentiment Ratio (Only X)" : "Sentiment Ratio (All)";
 
       const ctx1 = document.getElementById("hourlyChart").getContext("2d");
       if (hourlyChartObj) hourlyChartObj.destroy();
       hourlyChartObj = new Chart(ctx1, {
         type: "line",
         data: {
-          labels: data.hourly_chart.labels,
+          labels: chartData.labels,
           datasets: [
-            { label: "Negative", data: data.hourly_chart.negative, borderColor: "#f87171", backgroundColor: "rgba(248,113,113,0.18)", fill: true, tension: 0.35, borderWidth: 2 },
-            { label: "Positive", data: data.hourly_chart.positive, borderColor: "#34d399", backgroundColor: "rgba(52,211,153,0.14)", fill: true, tension: 0.35, borderWidth: 2 },
-            { label: "Neutral", data: data.hourly_chart.neutral, borderColor: "#94a3b8", borderDash: [3, 3], tension: 0.35, borderWidth: 1.3 }
+            { label: "Negative", data: chartData.negative, borderColor: "#f87171", backgroundColor: "rgba(248,113,113,0.18)", fill: true, tension: 0.35, borderWidth: 2 },
+            { label: "Positive", data: chartData.positive, borderColor: "#34d399", backgroundColor: "rgba(52,211,153,0.14)", fill: true, tension: 0.35, borderWidth: 2 },
+            { label: "Neutral", data: chartData.neutral, borderColor: "#94a3b8", borderDash: [3, 3], tension: 0.35, borderWidth: 1.3 }
           ]
         },
         options: {
@@ -489,13 +566,17 @@
         }
       });
 
+      const donutVals = useX
+        ? [data.stats.x_negative, data.stats.x_positive, data.stats.x_neutral]
+        : [data.stats.negative, data.stats.positive, data.stats.neutral];
+
       const ctx2 = document.getElementById("donutChart").getContext("2d");
       if (donutChartObj) donutChartObj.destroy();
       donutChartObj = new Chart(ctx2, {
         type: "doughnut",
         data: {
           labels: ["Negative", "Positive", "Neutral"],
-          datasets: [{ data: [data.stats.negative, data.stats.positive, data.stats.neutral], backgroundColor: ["#ef4444", "#10b981", "#64748b"], borderWidth: 0 }]
+          datasets: [{ data: donutVals, backgroundColor: ["#ef4444", "#10b981", "#64748b"], borderWidth: 0 }]
         },
         options: {
           animation: false,
@@ -724,7 +805,7 @@
       const topNeg = allItems.filter(i => i.sentiment === "negative").slice(0, 5);
       const topNegAccs = (latestPayload.accounts || []).filter(a => a.negative > 0).sort((a, b) => b.negative - a.negative).slice(0, 4);
 
-      let text = `📊 *RAJWATCH PRO — MEDIA & X BRIEF (${latestPayload.active_date})*\n`;
+      let text = `📊 *CIU WATCH — DAILY MEDIA & X BRIEF (${latestPayload.active_date})*\n`;
       text += `🕒 Updated: ${latestPayload.updated_at}\n`;
       text += `🚨 Crisis Score: ${s.crisis_score}/100\n\n`;
       text += `📈 *SENTIMENT (Total ${s.total} | X: ${s.x_count} | News: ${s.news_count})*\n`;
@@ -764,7 +845,7 @@
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = `RajWatch_Feed_${(latestPayload && latestPayload.active_date) || "report"}.csv`;
+      link.download = `CIU_Watch_Feed_${(latestPayload && latestPayload.active_date) || "report"}.csv`;
       link.click();
     }
 
@@ -781,29 +862,44 @@
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = `RajWatch_Accounts_Bifurcation_${latestPayload.active_date}.csv`;
+      link.download = `CIU_Watch_Accounts_${latestPayload.active_date}.csv`;
       link.click();
     }
 
     async function fetchFeed(force = false) {
-      countdown = 25;
+      countdown = scanInterval || 30;
       try {
         const dateParam = selectedDate ? `&date=${encodeURIComponent(selectedDate)}` : "";
         const res = await fetch(`/api/feed?keywords=${encodeURIComponent(keywords.join(","))}&force=${force}${dateParam}`);
         const data = await res.json();
         latestPayload = data;
-        const s = data.stats;
+        const isArchive = data.mode === "archive";
 
-        // Set date picker max date to today & sync value
+        // Client-side merge safety net in Live mode so X tweets NEVER vanish even if server restarts
+        let items = data.items || [];
+        if (!isArchive && data.today_date) {
+          const serverX = items.filter(i => i.source === "X");
+          const savedX = loadBrowserXBackup(data.today_date);
+          const mergedXMap = new Map();
+          savedX.forEach(t => mergedXMap.set(t.id, t));
+          serverX.forEach(t => mergedXMap.set(t.id, t));
+          const mergedX = Array.from(mergedXMap.values());
+          saveBrowserXBackup(data.today_date, mergedX);
+
+          const nonX = items.filter(i => i.source !== "X");
+          items = [...mergedX, ...nonX].sort((a, b) => b.ts - a.ts);
+          data.stats.x_count = mergedX.length;
+          data.stats.total = items.length;
+        }
+
+        const s = data.stats;
         const dp = document.getElementById("datePicker");
         if (data.today_date) dp.max = data.today_date;
         if (!dp.value && data.active_date) dp.value = data.active_date;
 
-        // Toggle Live vs Archive UI
-        const isArchive = data.mode === "archive";
         document.getElementById("archiveBanner").classList.toggle("hidden", !isArchive);
         document.getElementById("liveResetBtn").classList.toggle("hidden", !isArchive);
-        document.getElementById("timerPill").classList.toggle("hidden", isArchive);
+        document.getElementById("intervalBox").classList.toggle("hidden", isArchive);
         document.getElementById("liveDot").className = isArchive
           ? "h-3 w-3 rounded-full bg-amber-400"
           : "h-3 w-3 rounded-full bg-emerald-400 animate-pulse";
@@ -826,11 +922,11 @@
         const xBadge = document.getElementById("xBadge");
         const xErr = document.getElementById("xErrorBox");
         if (data.x_status.startsWith("live")) {
-          xBadge.textContent = isArchive ? `X: ARCHIVE (${s.x_count})` : `X: ${data.x_status.toUpperCase()}`;
+          xBadge.textContent = isArchive ? `X: ARCHIVE (${s.x_count})` : `X: LIVE (${s.x_count})`;
           xBadge.className = "px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold";
           xErr.classList.add("hidden");
         } else {
-          xBadge.textContent = "X: Warning / Pending";
+          xBadge.textContent = `X: Cached (${s.x_count})`;
           xBadge.className = "px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold";
           xErr.textContent = data.x_error || "Render Environment mein X_AUTH_TOKEN aur X_CT0 check karein.";
           xErr.classList.remove("hidden");
@@ -851,7 +947,7 @@
         const newIds = new Set();
         let hasAlert = false;
         let newestItem = null;
-        data.items.forEach(item => {
+        items.forEach(item => {
           if (!seenIds.has(item.id)) {
             seenIds.add(item.id);
             if (!firstLoad && !isArchive) {
@@ -862,7 +958,7 @@
           }
         });
 
-        allItems = data.items;
+        allItems = items;
         renderCharts(data);
         renderRadars();
         renderFeed(newIds);
@@ -870,7 +966,7 @@
         if (!firstLoad && !isArchive && newIds.size > 0) {
           playBeep(hasAlert);
           if ("Notification" in window && Notification.permission === "granted" && newestItem) {
-            new Notification(`${newestItem.source} Update (${newestItem.author})`, { body: newestItem.text.slice(0, 120) });
+            new Notification(`CIU Watch — ${newestItem.source} (${newestItem.author})`, { body: newestItem.text.slice(0, 120) });
           }
         }
         firstLoad = false;
@@ -879,13 +975,16 @@
       }
     }
 
+    initIntervalUI();
     renderKeywords();
     fetchFeed(false);
+
     setInterval(() => {
-      if (selectedDate) return; // Pause auto-scan in Back-Date mode
+      if (selectedDate || scanInterval === 0) return;
       countdown--;
       if (countdown <= 0) fetchFeed(false);
-      document.getElementById("timer").textContent = countdown;
+      const tEl = document.getElementById("timer");
+      if (tEl) tEl.textContent = countdown;
     }, 1000);
   </script>
 </body>
