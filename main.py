@@ -1,19 +1,22 @@
+import asyncio
+import email.utils
 import html
 import os
 import re
 import time
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
+import feedparser
 import httpx
 from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
-app = FastAPI(title="RajWatch X-LIVE | Real-Time X Radar & Sentiment War Room")
+app = FastAPI(title="RajWatch PRO | Live X Bridge + Newspapers + Live TV")
 
-# Chrome Extension se direct tweets receive karne ke liye CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,11 +26,37 @@ app.add_middleware(
 )
 
 IST = timezone(timedelta(hours=5, minutes=30))
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/128.0.0.0 Safari/537.36"
+    ),
+    "Accept-Language": "hi-IN,hi;q=0.9,en-IN;q=0.8,en;q=0.7",
+}
 
-# In-memory Live Tweet Store (Last 24h, max 600 latest tweets)
+# Verified Direct Rajasthan Newspapers RSS
+NEWSPAPER_RSS_FEEDS = [
+    ("Dainik Bhaskar", "https://feeds.bhaskar.com/rajasthan/"),
+    ("Rajasthan Patrika", "https://www.patrika.com/rss/rajasthan/"),
+    ("Zee News Rajasthan", "https://zeenews.india.com/rss/india/rajasthan.xml"),
+]
+
+# Verified Rajasthan News TV Channels (Exact XML timestamps + 24x7 Live TV Wall)
+YOUTUBE_TV_CHANNELS = [
+    ("First India News", "UC_cZYFovNQTsKw1ZLmO_AMA"),
+    ("Zee Rajasthan", "UCfnvGSUXKIuaCv-9E9a2UJg"),
+    ("News18 Rajasthan", "UC7FlLbNo66YsCEAPuJITiNg"),
+]
+
+# In-memory Live X Store (Instant updates from Chrome Extension)
 LIVE_TWEETS: Dict[str, Dict[str, Any]] = {}
 BRIDGE_STATE: Dict[str, Any] = {"last_ping": 0.0, "total_received": 0, "active_query": ""}
 API_CACHE: Dict[str, Any] = {"query": "", "ts": 0.0}
+
+# 45-second cache for Newspapers & YouTube RSS so 12s X polling stays super fast
+MEDIA_CACHE: Dict[str, Dict[str, Any]] = {}
+MEDIA_CACHE_TTL = 45
 
 NEGATIVE_WORDS = [
     "leak", "scam", "paper leak", "protest", "dharna", "virodh", "ghotala",
@@ -126,6 +155,7 @@ DEPARTMENTS = {
 
 def clean_text(raw: str) -> str:
     text = html.unescape(raw or "")
+    text = re.sub(r"<[^>]+>", " ", text)
     return re.sub(r"\s+", " ", text).strip()
 
 
@@ -133,7 +163,7 @@ def detect_language(text: str) -> str:
     return "Hindi" if re.search(r"[\u0900-\u097F]", text) else "English"
 
 
-def analyze_sentiment(text: str):
+def analyze_sentiment(text: str) -> Tuple[str, List[str]]:
     low = (text or "").lower()
     neg = [w for w in NEGATIVE_WORDS if w in low]
     pos = [w for w in POSITIVE_WORDS if w in low]
@@ -162,11 +192,18 @@ def detect_department(text: str) -> str:
     return "General / Public"
 
 
-def parse_ts(date_str: str) -> float:
+def parse_ts(date_str: str, default_offset_sec: int = 0) -> float:
     now_ts = time.time()
     if not date_str:
-        return now_ts
+        return now_ts - default_offset_sec
     s = str(date_str).strip()
+    try:
+        dt = email.utils.parsedate_to_datetime(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return min(dt.timestamp(), now_ts)
+    except Exception:
+        pass
     try:
         dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
         if dt.tzinfo is None:
@@ -182,7 +219,7 @@ def parse_ts(date_str: str) -> float:
             return min(dt.timestamp(), now_ts)
         except Exception:
             continue
-    return now_ts
+    return now_ts - default_offset_sec
 
 
 def format_time_ago(ts: float, now_ts: float) -> str:
@@ -196,6 +233,39 @@ def format_time_ago(ts: float, now_ts: float) -> str:
     return f"{diff // 86400}d ago"
 
 
+def build_item(
+    item_id: str,
+    category: str,
+    title: str,
+    source: str,
+    url: str,
+    ts: float,
+    handle: str = "",
+    metrics: str = "",
+) -> Dict[str, Any]:
+    title_clean = clean_text(title)
+    dt_ist = datetime.fromtimestamp(ts, tz=IST)
+    sent, triggers = analyze_sentiment(title_clean)
+    return {
+        "id": item_id,
+        "category": category,  # "x" | "newspaper" | "youtube"
+        "title": title_clean,
+        "source": clean_text(source),
+        "handle": handle,
+        "url": url or "#",
+        "language": detect_language(title_clean),
+        "sentiment": sent,
+        "triggers": triggers,
+        "district": detect_district(title_clean),
+        "department": detect_department(title_clean),
+        "published_ts": ts,
+        "hour_ist": dt_ist.hour,
+        "date_ist": dt_ist.strftime("%Y-%m-%d"),
+        "time_str": dt_ist.strftime("%I:%M %p"),
+        "metrics": metrics,
+    }
+
+
 def store_tweet(tw: Dict[str, Any]):
     tid = str(tw.get("id") or "").strip()
     text = clean_text(tw.get("text") or "")
@@ -203,45 +273,32 @@ def store_tweet(tw: Dict[str, Any]):
         return
 
     ts = parse_ts(tw.get("created_at") or "")
-    dt_ist = datetime.fromtimestamp(ts, tz=IST)
-    sent, triggers = analyze_sentiment(text)
-
     handle = clean_text(tw.get("handle") or "x_user").lstrip("@")
     name = clean_text(tw.get("name") or handle)
     url = tw.get("url") or f"https://x.com/{handle}/status/{tid}"
-
     likes = str(tw.get("likes") or "0")
     retweets = str(tw.get("retweets") or "0")
     replies = str(tw.get("replies") or "0")
 
-    LIVE_TWEETS[tid] = {
-        "id": tid,
-        "title": text,
-        "name": name,
-        "handle": f"@{handle}",
-        "source": f"{name} (@{handle})",
-        "url": url,
-        "language": detect_language(text),
-        "sentiment": sent,
-        "triggers": triggers,
-        "district": detect_district(text),
-        "department": detect_department(text),
-        "published_ts": ts,
-        "hour_ist": dt_ist.hour,
-        "date_ist": dt_ist.strftime("%Y-%m-%d"),
-        "time_str": dt_ist.strftime("%I:%M %p"),
-        "metrics": f"💬 {replies}   ↻ {retweets}   ♥ {likes}",
-    }
+    LIVE_TWEETS[tid] = build_item(
+        item_id=f"x_{tid}",
+        category="x",
+        title=text,
+        source=f"{name} (@{handle})",
+        url=url,
+        ts=ts,
+        handle=f"@{handle}",
+        metrics=f"💬 {replies}   ↻ {retweets}   ♥ {likes}",
+    )
 
-    # Trim if > 600 tweets
     if len(LIVE_TWEETS) > 600:
         oldest_keys = sorted(LIVE_TWEETS.keys(), key=lambda k: LIVE_TWEETS[k]["published_ts"])[:100]
         for k in oldest_keys:
             LIVE_TWEETS.pop(k, None)
 
 
-# Optional: Agar TWITTERAPI_IO_KEY Render Environment mein add ho toh 24x7 bina laptop ke bhi fetch karega
-async def fetch_from_twitterapi_io(keywords: List[str]):
+# Optional 24x7 X API support if TWITTERAPI_IO_KEY is configured
+async def fetch_from_twitterapi_io(keywords: List[str]) -> bool:
     api_key = os.getenv("TWITTERAPI_IO_KEY", "").strip()
     if not api_key:
         return False
@@ -281,9 +338,140 @@ async def fetch_from_twitterapi_io(keywords: List[str]):
     return False
 
 
+# Direct Rajasthan Newspapers RSS (Exact timestamps)
+async def fetch_direct_newspapers(http: httpx.AsyncClient) -> List[Dict[str, Any]]:
+    async def get_feed(name: str, url: str):
+        out = []
+        try:
+            r = await http.get(url, headers=HEADERS, timeout=9.0)
+            feed = feedparser.parse(r.text)
+            for entry in feed.entries[:15]:
+                title = entry.get("title", "")
+                link = entry.get("link", "")
+                pub = entry.get("published") or entry.get("updated") or ""
+                if not title:
+                    continue
+                out.append(
+                    build_item(
+                        item_id=f"np_{abs(hash(link or title))}",
+                        category="newspaper",
+                        title=title,
+                        source=name,
+                        url=link,
+                        ts=parse_ts(pub, default_offset_sec=3600),
+                    )
+                )
+        except Exception:
+            pass
+        return out
+
+    batches = await asyncio.gather(*(get_feed(n, u) for n, u in NEWSPAPER_RSS_FEEDS))
+    return [it for b in batches for it in b]
+
+
+# Hindi + English Newspaper Portals via Google News RSS (Exact timestamps)
+async def fetch_google_newspapers(
+    http: httpx.AsyncClient, query: str, lang: str, limit: int = 25
+) -> List[Dict[str, Any]]:
+    encoded_q = urllib.parse.quote(f"{query} when:1d")
+    if lang == "hi":
+        url = f"https://news.google.com/rss/search?q={encoded_q}&hl=hi&gl=IN&ceid=IN:hi"
+    else:
+        url = f"https://news.google.com/rss/search?q={encoded_q}&hl=en-IN&gl=IN&ceid=IN:en"
+
+    out = []
+    try:
+        r = await http.get(url, headers=HEADERS, timeout=10.0)
+        feed = feedparser.parse(r.text)
+        for entry in feed.entries[:limit]:
+            raw_title = clean_text(entry.get("title", ""))
+            source = "News Paper"
+            if entry.get("source") and isinstance(entry.source, dict):
+                source = entry.source.get("title", source)
+            elif " - " in raw_title:
+                parts = raw_title.rsplit(" - ", 1)
+                raw_title, source = parts[0].strip(), parts[1].strip()
+            pub = entry.get("published") or entry.get("updated") or ""
+            link = entry.get("link", "#")
+            if not raw_title:
+                continue
+            out.append(
+                build_item(
+                    item_id=f"gn_{lang}_{abs(hash(link or raw_title))}",
+                    category="newspaper",
+                    title=raw_title,
+                    source=source,
+                    url=link,
+                    ts=parse_ts(pub, default_offset_sec=3600),
+                )
+            )
+    except Exception:
+        pass
+    return out
+
+
+# Verified Official YouTube News Channels XML Feeds (Exact timestamps)
+async def fetch_youtube_tv_news(http: httpx.AsyncClient) -> List[Dict[str, Any]]:
+    async def get_ch(ch_name: str, ch_id: str):
+        out = []
+        url = f"https://www.youtube.com/feeds/videos.xml?channel_id={ch_id}"
+        try:
+            r = await http.get(url, headers=HEADERS, timeout=9.0)
+            feed = feedparser.parse(r.text)
+            for entry in feed.entries[:10]:
+                title = entry.get("title", "")
+                link = entry.get("link", "")
+                pub = entry.get("published") or entry.get("updated") or ""
+                vid = entry.get("yt_videoid", abs(hash(link)))
+                if not title:
+                    continue
+                out.append(
+                    build_item(
+                        item_id=f"yt_{vid}",
+                        category="youtube",
+                        title=title,
+                        source=ch_name,
+                        url=link,
+                        ts=parse_ts(pub, default_offset_sec=3600),
+                    )
+                )
+        except Exception:
+            pass
+        return out
+
+    batches = await asyncio.gather(*(get_ch(n, cid) for n, cid in YOUTUBE_TV_CHANNELS))
+    return [it for b in batches for it in b]
+
+
+async def get_cached_media(kw_list: List[str], force: bool = False) -> List[Dict[str, Any]]:
+    cache_key = ",".join(k.lower() for k in kw_list[:6])
+    now = time.time()
+    cached = MEDIA_CACHE.get(cache_key)
+    if not force and cached and (now - cached["ts"] < MEDIA_CACHE_TTL):
+        return cached["items"]
+
+    or_q = " OR ".join(f'"{k}"' if " " in k else k for k in kw_list[:6])
+    async with httpx.AsyncClient(timeout=11.0, follow_redirects=True) as http:
+        direct_np, gn_hi, gn_en, yt_news = await asyncio.gather(
+            fetch_direct_newspapers(http),
+            fetch_google_newspapers(http, or_q, "hi", 28),
+            fetch_google_newspapers(http, or_q, "en", 25),
+            fetch_youtube_tv_news(http),
+            return_exceptions=True,
+        )
+
+    combined: List[Dict[str, Any]] = []
+    for batch in (direct_np, gn_hi, gn_en, yt_news):
+        if isinstance(batch, list):
+            combined.extend(batch)
+
+    MEDIA_CACHE[cache_key] = {"ts": now, "items": combined}
+    return combined
+
+
 @app.post("/api/ingest")
 async def ingest_tweets(request: Request):
-    """Chrome Extension yahan har 10 second mein live X tweets bhejti hai."""
+    """Chrome Extension sends live X tweets here (no extension changes needed)."""
     data = await request.json()
     tweets = data.get("tweets") or []
     added = 0
@@ -300,12 +488,6 @@ async def ingest_tweets(request: Request):
     return JSONResponse({"ok": True, "received": added, "total_stored": len(LIVE_TWEETS)})
 
 
-@app.post("/api/clear")
-async def clear_tweets():
-    LIVE_TWEETS.clear()
-    return JSONResponse({"ok": True})
-
-
 @app.get("/")
 async def serve_home():
     return FileResponse(Path(__file__).parent / "index.html")
@@ -313,23 +495,37 @@ async def serve_home():
 
 @app.get("/api/feed")
 async def api_feed(
-    keywords: str = Query(default="Bhajanlal,RajCMO,Rajasthan govt,Jaipur,RPSC,paper leak,Jila Pramukh")
+    keywords: str = Query(default="Bhajanlal,RajCMO,Rajasthan govt,Jaipur,RPSC,paper leak,Jila Pramukh"),
+    force: bool = Query(default=False),
 ):
     kw_list = [k.strip() for k in keywords.split(",") if k.strip()]
-    api_active = await fetch_from_twitterapi_io(kw_list)
+    if not kw_list:
+        kw_list = ["Rajasthan", "Bhajanlal", "Jaipur"]
+
+    api_active, media_items = await asyncio.gather(
+        fetch_from_twitterapi_io(kw_list),
+        get_cached_media(kw_list, force=force),
+    )
 
     now_ist = datetime.now(IST)
     now_ts = now_ist.timestamp()
     today_str = now_ist.strftime("%Y-%m-%d")
     cutoff = now_ts - 86400
 
-    # Strictly sort newest tweets first (Just now / 1m ago on top)
+    # Combine Live X Tweets + Newspapers + YouTube TV & sort strictly newest first
+    all_raw = list(LIVE_TWEETS.values()) + media_items
     items: List[Dict[str, Any]] = []
-    for tw in sorted(LIVE_TWEETS.values(), key=lambda x: x["published_ts"], reverse=True):
-        if tw["published_ts"] < cutoff:
+    seen = set()
+
+    for raw in sorted(all_raw, key=lambda x: x["published_ts"], reverse=True):
+        if raw["published_ts"] < cutoff:
             continue
-        item_copy = dict(tw)
-        item_copy["time_ago"] = format_time_ago(tw["published_ts"], now_ts)
+        dedup_key = f"{raw['category']}_{re.sub(r'[^a-zA-Z0-9\u0900-\u097F]+', '', raw['title'].lower())[:50]}"
+        if dedup_key in seen:
+            continue
+        seen.add(dedup_key)
+        item_copy = dict(raw)
+        item_copy["time_ago"] = format_time_ago(raw["published_ts"], now_ts)
         items.append(item_copy)
 
     hours_range = list(range(0, now_ist.hour + 1))
@@ -341,7 +537,8 @@ async def api_feed(
     dept_stats: Dict[str, Dict[str, int]] = {}
     voices: Dict[str, Dict[str, Any]] = {}
 
-    pos_total = neg_total = neu_total = hi_total = en_total = 0
+    pos_total = neg_total = neu_total = 0
+    x_total = np_total = yt_total = hi_total = en_total = 0
 
     for it in items:
         s = it["sentiment"]
@@ -351,6 +548,14 @@ async def api_feed(
             neg_total += 1
         else:
             neu_total += 1
+
+        cat = it["category"]
+        if cat == "x":
+            x_total += 1
+        elif cat == "newspaper":
+            np_total += 1
+        elif cat == "youtube":
+            yt_total += 1
 
         if it["language"] == "Hindi":
             hi_total += 1
@@ -383,11 +588,12 @@ async def api_feed(
         elif s == "positive":
             dept_stats[dp]["positive"] += 1
 
-        hnd = it["handle"]
-        voices.setdefault(hnd, {"handle": hnd, "total": 0, "negative": 0})
-        voices[hnd]["total"] += 1
-        if s == "negative":
-            voices[hnd]["negative"] += 1
+        if cat == "x" and it.get("handle"):
+            hnd = it["handle"]
+            voices.setdefault(hnd, {"handle": hnd, "total": 0, "negative": 0})
+            voices[hnd]["total"] += 1
+            if s == "negative":
+                voices[hnd]["negative"] += 1
 
     total = max(len(items), 1)
     neg_pct = round((neg_total / total) * 100, 1)
@@ -395,25 +601,35 @@ async def api_feed(
     neu_pct = round((neu_total / total) * 100, 1)
 
     recent_neg = sum(1 for it in items if it["sentiment"] == "negative" and (now_ts - it["published_ts"]) <= 3600)
-    crisis_score = min(100, int((neg_pct * 1.3) + (recent_neg * 5))) if items else 0
+    crisis_score = min(100, int((neg_pct * 1.3) + (recent_neg * 4))) if items else 0
 
     bridge_age = int(now_ts - BRIDGE_STATE["last_ping"]) if BRIDGE_STATE["last_ping"] else 99999
-    bridge_connected = bridge_age <= 90
-
-    if bridge_connected:
-        status = "LIVE_BRIDGE"
+    if bridge_age <= 90:
+        x_status = "LIVE_BRIDGE"
     elif api_active:
-        status = "LIVE_API"
+        x_status = "LIVE_API"
     else:
-        status = "WAITING"
+        x_status = "WAITING"
+
+    live_tv = [
+        {
+            "source": name,
+            "title": f"{name} — 24x7 Live TV Stream",
+            "embed_url": f"https://www.youtube.com/embed/live_stream?channel={cid}&mute=1",
+        }
+        for name, cid in YOUTUBE_TV_CHANNELS
+    ]
 
     return JSONResponse(
         {
             "updated_at": now_ist.strftime("%d %b %Y, %I:%M:%S %p IST"),
-            "status": status,
-            "bridge_age_sec": bridge_age if BRIDGE_STATE["last_ping"] else None,
+            "status": x_status,
             "stats": {
                 "total": len(items),
+                "x_count": x_total,
+                "newspaper_count": np_total,
+                "youtube_count": yt_total,
+                "live_tv_count": len(live_tv),
                 "positive": pos_total,
                 "negative": neg_total,
                 "neutral": neu_total,
@@ -441,6 +657,7 @@ async def api_feed(
                 reverse=True,
             ),
             "top_voices": sorted(voices.values(), key=lambda x: (x["negative"], x["total"]), reverse=True)[:8],
-            "items": items[:150],
+            "live_tv": live_tv,
+            "items": items[:180],
         }
     )
