@@ -14,11 +14,6 @@ import httpx
 from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 
-try:
-    from twikit import Client as TwikitClient
-except Exception:
-    TwikitClient = None
-
 app = FastAPI(title="RajWatch Pro - 360 Media, X & Live TV War Room")
 
 IST = timezone(timedelta(hours=5, minutes=30))
@@ -26,14 +21,21 @@ HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
+        "Chrome/128.0.0.0 Safari/537.36"
     ),
     "Accept-Language": "hi-IN,hi;q=0.9,en-IN;q=0.8,en;q=0.7",
 }
 
+# Public Web App Bearer Token used by x.com frontend
+X_BEARER = (
+    "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs"
+    "%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA"
+)
+
 FEED_CACHE: Dict[str, Dict[str, Any]] = {}
 CACHE_TTL_SECONDS = 40
 X_ACCOUNT_INDEX = 0
+CACHED_SEARCH_QID: Dict[str, Any] = {"qid": "nK1dw4oV3k4w5TdtcAdSww", "ts": 0.0}
 
 NEGATIVE_WORDS = [
     "scam", "leak", "paper leak", "protest", "strike", "outrage", "anger",
@@ -206,10 +208,18 @@ def parse_rss_datetime(entry: Any, fallback: datetime) -> datetime:
     return fallback
 
 
+def parse_twitter_time(raw: str, fallback: datetime) -> datetime:
+    if not raw:
+        return fallback
+    try:
+        return datetime.strptime(raw, "%a %b %d %H:%M:%S %z %Y").astimezone(IST)
+    except Exception:
+        return fallback
+
+
 def get_x_accounts() -> List[Tuple[str, str]]:
     accounts: List[Tuple[str, str]] = []
-    suffixes = ["", "_2", "_3"]
-    for sfx in suffixes:
+    for sfx in ["", "_2", "_3"]:
         tok = (os.getenv(f"X_AUTH_TOKEN{sfx}") or "").strip().strip('"').strip("'")
         ct0 = (os.getenv(f"X_CT0{sfx}") or "").strip().strip('"').strip("'")
         if tok and ct0:
@@ -217,105 +227,304 @@ def get_x_accounts() -> List[Tuple[str, str]]:
     return accounts
 
 
+def build_x_headers(auth_token: str, ct0: str) -> Dict[str, str]:
+    return {
+        "authorization": X_BEARER,
+        "x-csrf-token": ct0,
+        "x-twitter-auth-type": "OAuth2Session",
+        "x-twitter-active-user": "yes",
+        "x-twitter-client-language": "en",
+        "cookie": f"auth_token={auth_token}; ct0={ct0}",
+        "referer": "https://x.com/search",
+        "origin": "https://x.com",
+        "user-agent": HEADERS["User-Agent"],
+        "accept": "*/*",
+    }
+
+
+def _make_tweet_item(
+    tw_id: str,
+    text: str,
+    display_name: str,
+    screen_name: str,
+    created_at: str,
+    likes: int,
+    retweets: int,
+    now_ist: datetime,
+) -> Dict[str, Any]:
+    dt_ist = parse_twitter_time(created_at, now_ist)
+    sentiment = analyze_sentiment(text)
+    return {
+        "id": f"x_{tw_id}",
+        "title": text,
+        "source": f"{display_name} (@{screen_name})",
+        "url": f"https://x.com/{screen_name}/status/{tw_id}",
+        "category": "x",
+        "language": detect_language(text),
+        "sentiment": sentiment["label"],
+        "triggers": sentiment["triggers"],
+        "district": detect_district(text),
+        "department": detect_department(text),
+        "published_ts": dt_ist.timestamp(),
+        "hour_ist": dt_ist.hour,
+        "time_str": dt_ist.strftime("%I:%M %p"),
+        "time_ago": format_time_ago(dt_ist, now_ist),
+        "metrics": f"♥ {likes}  ↻ {retweets}",
+        "video_id": None,
+    }
+
+
+async def fetch_x_adaptive(
+    client: httpx.AsyncClient,
+    x_query: str,
+    auth_token: str,
+    ct0: str,
+) -> Tuple[List[Dict[str, Any]], int, str]:
+    now_ist = datetime.now(IST)
+    headers = build_x_headers(auth_token, ct0)
+    params = {
+        "q": f"({x_query}) -filter:retweets",
+        "count": "20",
+        "tweet_search_mode": "live",
+        "tweet_mode": "extended",
+        "query_source": "typed_query",
+        "pc": "1",
+        "spelling_corrections": "1",
+    }
+    try:
+        resp = await client.get(
+            "https://x.com/i/api/2/search/adaptive.json",
+            headers=headers,
+            params=params,
+            timeout=10.0,
+        )
+        if resp.status_code != 200:
+            return ([], resp.status_code, f"HTTP {resp.status_code}")
+
+        data = resp.json()
+        global_obj = data.get("globalObjects", {})
+        tweets_map = global_obj.get("tweets", {})
+        users_map = global_obj.get("users", {})
+
+        items: List[Dict[str, Any]] = []
+        for tw_id, tw in tweets_map.items():
+            text = clean_text(tw.get("full_text") or tw.get("text") or "")
+            if not text:
+                continue
+            uid = str(tw.get("user_id_str") or tw.get("user_id") or "")
+            user = users_map.get(uid, {})
+            items.append(
+                _make_tweet_item(
+                    tw_id=str(tw_id),
+                    text=text,
+                    display_name=user.get("name", "X User"),
+                    screen_name=user.get("screen_name", "x"),
+                    created_at=tw.get("created_at", ""),
+                    likes=int(tw.get("favorite_count", 0) or 0),
+                    retweets=int(tw.get("retweet_count", 0) or 0),
+                    now_ist=now_ist,
+                )
+            )
+        return (items, 200, "OK")
+    except Exception as e:
+        return ([], 0, str(e)[:80])
+
+
+async def _refresh_search_qid(client: httpx.AsyncClient) -> str:
+    now_ts = time.time()
+    if now_ts - CACHED_SEARCH_QID["ts"] < 1800:
+        return CACHED_SEARCH_QID["qid"]
+    try:
+        home = await client.get("https://x.com", headers=HEADERS, timeout=8.0, follow_redirects=True)
+        js_urls = re.findall(r'https://abs\.twimg\.com/responsive-web/client-web/main\.[A-Za-z0-9_-]+\.js', home.text)
+        if js_urls:
+            js_resp = await client.get(js_urls[0], headers=HEADERS, timeout=8.0)
+            m = re.search(r'queryId:"([A-Za-z0-9_-]+)",operationName:"SearchTimeline"', js_resp.text)
+            if m:
+                CACHED_SEARCH_QID["qid"] = m.group(1)
+                CACHED_SEARCH_QID["ts"] = now_ts
+    except Exception:
+        pass
+    return CACHED_SEARCH_QID["qid"]
+
+
+def _extract_graphql_tweets(obj: Any, results: List[Dict[str, Any]]) -> None:
+    if isinstance(obj, dict):
+        if "tweet_results" in obj and isinstance(obj["tweet_results"], dict):
+            res = obj["tweet_results"].get("result")
+            if isinstance(res, dict):
+                if res.get("__typename") == "TweetWithVisibilityResults" and "tweet" in res:
+                    res = res["tweet"]
+                if isinstance(res, dict) and "legacy" in res:
+                    results.append(res)
+            return
+        for val in obj.values():
+            _extract_graphql_tweets(val, results)
+    elif isinstance(obj, list):
+        for elem in obj:
+            _extract_graphql_tweets(elem, results)
+
+
+async def fetch_x_graphql(
+    client: httpx.AsyncClient,
+    x_query: str,
+    auth_token: str,
+    ct0: str,
+) -> Tuple[List[Dict[str, Any]], int, str]:
+    now_ist = datetime.now(IST)
+    qid = await _refresh_search_qid(client)
+    headers = build_x_headers(auth_token, ct0)
+    variables = {
+        "rawQuery": f"({x_query}) -filter:retweets",
+        "count": 20,
+        "querySource": "typed_query",
+        "product": "Latest",
+    }
+    features = {
+        "rweb_tipjar_consumption_enabled": True,
+        "responsive_web_graphql_exclude_directive_enabled": True,
+        "verified_phone_label_enabled": False,
+        "creator_subscriptions_tweet_preview_api_enabled": True,
+        "responsive_web_graphql_timeline_navigation_enabled": True,
+        "responsive_web_graphql_skip_user_profile_image_extensions_enabled": False,
+        "communities_web_enable_tweet_community_results_fetch": True,
+        "c9s_tweet_anatomy_moderator_badge_enabled": True,
+        "articles_preview_enabled": True,
+        "responsive_web_edit_tweet_api_enabled": True,
+        "graphql_is_translatable_rweb_tweet_is_translatable_enabled": True,
+        "view_counts_everywhere_api_enabled": True,
+        "longform_notetweets_consumption_enabled": True,
+        "responsive_web_twitter_article_tweet_consumption_enabled": True,
+        "tweet_awards_web_tipping_enabled": False,
+        "freedom_of_speech_not_reach_fetch_enabled": True,
+        "standardized_nudges_misinfo": True,
+        "tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled": True,
+        "longform_notetweets_rich_text_read_enabled": True,
+        "longform_notetweets_inline_media_enabled": True,
+        "responsive_web_enhance_cards_enabled": False,
+    }
+    try:
+        resp = await client.get(
+            f"https://x.com/i/api/graphql/{qid}/SearchTimeline",
+            headers=headers,
+            params={
+                "variables": json.dumps(variables, separators=(",", ":")),
+                "features": json.dumps(features, separators=(",", ":")),
+            },
+            timeout=10.0,
+        )
+        if resp.status_code != 200:
+            return ([], resp.status_code, f"HTTP {resp.status_code}")
+
+        raw_tweets: List[Dict[str, Any]] = []
+        _extract_graphql_tweets(resp.json(), raw_tweets)
+
+        items: List[Dict[str, Any]] = []
+        seen = set()
+        for res in raw_tweets:
+            legacy = res.get("legacy", {})
+            tw_id = str(res.get("rest_id") or legacy.get("id_str") or "")
+            if not tw_id or tw_id in seen:
+                continue
+            seen.add(tw_id)
+            text = clean_text(legacy.get("full_text") or "")
+            if not text:
+                continue
+            user_legacy = (
+                res.get("core", {})
+                .get("user_results", {})
+                .get("result", {})
+                .get("legacy", {})
+            )
+            items.append(
+                _make_tweet_item(
+                    tw_id=tw_id,
+                    text=text,
+                    display_name=user_legacy.get("name", "X User"),
+                    screen_name=user_legacy.get("screen_name", "x"),
+                    created_at=legacy.get("created_at", ""),
+                    likes=int(legacy.get("favorite_count", 0) or 0),
+                    retweets=int(legacy.get("retweet_count", 0) or 0),
+                    now_ist=now_ist,
+                )
+            )
+        return (items, 200, "OK")
+    except Exception as e:
+        return ([], 0, str(e)[:80])
+
+
+async def fetch_x_backup_stream(
+    client: httpx.AsyncClient,
+    x_query: str,
+) -> List[Dict[str, Any]]:
+    # Fetches fresh X posts from keyword index + key Rajasthan handles
+    handles_q = (
+        "(site:x.com/RajCMO OR site:x.com/BhajanlalBjp OR site:x.com/INCRajasthan "
+        "OR site:x.com/BJP4Rajasthan OR site:x.com/1stIndiaNews OR site:x.com/News18Rajasthan "
+        "OR site:x.com/zeerajasthan_)"
+    )
+    res1, res2 = await asyncio.gather(
+        fetch_google_news(
+            client, f"(site:x.com OR site:twitter.com) ({x_query})", lang="hi", category="x", limit=18
+        ),
+        fetch_google_news(client, handles_q, lang="hi", category="x", limit=12),
+        return_exceptions=True,
+    )
+    out: List[Dict[str, Any]] = []
+    for r in (res1, res2):
+        if isinstance(r, list):
+            out.extend(r)
+    return out
+
+
 async def fetch_x_live(
     client: httpx.AsyncClient,
     kw_list: List[str],
 ) -> Tuple[List[Dict[str, Any]], str, str]:
     global X_ACCOUNT_INDEX
-    now_ist = datetime.now(IST)
     accounts = get_x_accounts()
     x_query = " OR ".join(f'"{k}"' if " " in k else k for k in kw_list[:5])
 
     if not accounts:
-        backup = await fetch_google_news(
-            client,
-            f"(site:x.com OR site:twitter.com) ({x_query})",
-            lang="hi",
-            category="x",
-            limit=15,
-        )
+        backup = await fetch_x_backup_stream(client, x_query)
         return (
             backup,
             "PENDING",
-            "Render Environment mein exact KEY naam X_AUTH_TOKEN aur X_CT0 add karein (abhi backup X index posts dikh rahe hain).",
+            "Render Environment mein X_AUTH_TOKEN aur X_CT0 add karein. Abhi Backup X Stream chal rahi hai.",
         )
 
-    if TwikitClient is None:
-        return ([], "ERROR", "twikit package install nahi hua — requirements.txt check karein.")
-
+    last_code = 0
     last_err = ""
     for attempt in range(len(accounts)):
         idx = (X_ACCOUNT_INDEX + attempt) % len(accounts)
         auth_token, ct0 = accounts[idx]
-        try:
-            tw_client = TwikitClient("en-US")
-            tw_client.set_cookies({"auth_token": auth_token, "ct0": ct0})
-            tweets = await asyncio.wait_for(
-                tw_client.search_tweet(f"({x_query}) -filter:retweets", "Latest", count=20),
-                timeout=14.0,
-            )
+
+        # Try 1: Direct GraphQL SearchTimeline (no KEY_BYTE crash)
+        items, code, err = await fetch_x_graphql(client, x_query, auth_token, ct0)
+        if code == 200 and items:
             X_ACCOUNT_INDEX = (idx + 1) % len(accounts)
+            return (items, "LIVE", f"X Live Connected ({len(items)} tweets)")
 
-            items: List[Dict[str, Any]] = []
-            for tw in tweets or []:
-                text = clean_text(getattr(tw, "text", "") or getattr(tw, "full_text", ""))
-                if not text:
-                    continue
-                user = getattr(tw, "user", None)
-                screen_name = getattr(user, "screen_name", "x_user") if user else "x_user"
-                display_name = getattr(user, "name", screen_name) if user else screen_name
-                tw_id = getattr(tw, "id", str(time.time()))
+        # Try 2: Direct Adaptive Search API
+        items2, code2, err2 = await fetch_x_adaptive(client, x_query, auth_token, ct0)
+        if code2 == 200 and items2:
+            X_ACCOUNT_INDEX = (idx + 1) % len(accounts)
+            return (items2, "LIVE", f"X Live Connected ({len(items2)} tweets)")
 
-                dt_ist = now_ist
-                created_raw = getattr(tw, "created_at", None)
-                if created_raw:
-                    try:
-                        dt_parsed = datetime.strptime(str(created_raw), "%a %b %d %H:%M:%S %z %Y")
-                        dt_ist = dt_parsed.astimezone(IST)
-                    except Exception:
-                        pass
+        last_code = code if code in (401, 403, 429) else code2
+        last_err = f"GQL:{err} / ADP:{err2}"
 
-                sentiment = analyze_sentiment(text)
-                likes = getattr(tw, "favorite_count", 0) or 0
-                retweets = getattr(tw, "retweet_count", 0) or 0
-
-                items.append(
-                    {
-                        "id": f"x_{tw_id}",
-                        "title": text,
-                        "source": f"{display_name} (@{screen_name})",
-                        "url": f"https://x.com/{screen_name}/status/{tw_id}",
-                        "category": "x",
-                        "language": detect_language(text),
-                        "sentiment": sentiment["label"],
-                        "triggers": sentiment["triggers"],
-                        "district": detect_district(text),
-                        "department": detect_department(text),
-                        "published_ts": dt_ist.timestamp(),
-                        "hour_ist": dt_ist.hour,
-                        "time_str": dt_ist.strftime("%I:%M %p"),
-                        "time_ago": format_time_ago(dt_ist, now_ist),
-                        "metrics": f"♥ {likes}  ↻ {retweets}",
-                        "video_id": None,
-                    }
-                )
-
-            return (items, "LIVE", f"X Live Connected ({len(items)} live tweets fetched)")
-        except Exception as e:
-            last_err = str(e)[:120]
-
-    # Fallback if cookies expired or X blocked the session
-    backup = await fetch_google_news(
-        client,
-        f"(site:x.com OR site:twitter.com) ({x_query})",
-        lang="hi",
-        category="x",
-        limit=15,
-    )
+    backup = await fetch_x_backup_stream(client, x_query)
+    if last_code == 401:
+        return (
+            backup,
+            "EXPIRED",
+            "X ne 401 Unauthorized diya — auth_token ya ct0 sach mein expire/galat hai. Nayi cookies daalein (abhi Backup X posts chal rahe hain).",
+        )
     return (
         backup,
-        "ERROR",
-        f"X Cookie Error ({last_err}) — Fresh auth_token & ct0 update karein. Backup X posts dikh rahe hain.",
+        "MIRROR",
+        f"Cookies theek hain, lekin X ne Render ke free cloud server IP ko direct search se roka ({last_err}). Backup X Live Index + Rajasthan Handles chal rahe hain.",
     )
 
 
@@ -341,9 +550,9 @@ async def fetch_google_news(
         feed = feedparser.parse(resp.text)
         for entry in feed.entries[:limit]:
             raw_title = clean_text(entry.get("title", ""))
-            source = "News Desk"
+            source = "X / Twitter" if category == "x" else "News Desk"
             if entry.get("source") and isinstance(entry.source, dict):
-                source = entry.source.get("title", "News Desk")
+                source = entry.source.get("title", source)
             elif " - " in raw_title:
                 parts = raw_title.rsplit(" - ", 1)
                 raw_title, source = parts[0].strip(), parts[1].strip()
@@ -520,12 +729,10 @@ async def get_feed(
     x_status = "PENDING"
     x_message = ""
 
-    # Process X Result
     if not isinstance(results[0], Exception) and isinstance(results[0], tuple):
         x_items, x_status, x_message = results[0]
         all_items.extend(x_items)
 
-    # Process News, Websites, YouTube, Live TV
     for idx in range(1, len(results)):
         res = results[idx]
         if isinstance(res, Exception) or not isinstance(res, list):
