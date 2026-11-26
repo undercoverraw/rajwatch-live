@@ -1,132 +1,116 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="hi">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CIU WATCH — Real-Time 360° Media &amp; X Command Center</title>
+  <title>CIU WATCH — Real-Time Media &amp; X Command Center</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
-    body { background: #070b14; color: #e2e8f0; font-family: system-ui, -apple-system, sans-serif; }
-    .glass { background: #0f172a; border: 1px solid #1e293b; }
-    input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+    body { background:#070b14; color:#e2e8f0; font-family:system-ui,-apple-system,sans-serif; }
+    .glass { background:#0f172a; border:1px solid #1e293b; }
+    input[type="date"]::-webkit-calendar-picker-indicator,
+    input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter:invert(1); cursor:pointer; }
     @keyframes flashNew {
-      0% { box-shadow: 0 0 0 2px #ef4444, 0 0 24px rgba(239,68,68,.55); background: #261019; }
-      100% { box-shadow: 0 0 0 1px #1e293b; background: #0f172a; }
+      0% { box-shadow:0 0 0 2px #ef4444,0 0 24px rgba(239,68,68,.55); background:#261019; }
+      100% { box-shadow:0 0 0 1px #1e293b; background:#0f172a; }
     }
-    .new-flash { animation: flashNew 4s ease-out; }
+    .new-flash { animation:flashNew 4s ease-out; }
+    .field { background:#020617; border:1px solid #334155; border-radius:.5rem; padding:.4rem .6rem; font-size:.75rem; color:#fff; width:100%; }
   </style>
 </head>
 <body class="min-h-screen pb-10">
 
-  <!-- Top Command Header -->
+  <!-- LOGIN -->
+  <div id="loginBox" class="fixed inset-0 z-[60] hidden bg-[#070b14] flex items-center justify-center p-4">
+    <div class="glass rounded-2xl p-6 w-full max-w-sm space-y-3">
+      <h2 class="text-lg font-extrabold text-white">CIU <span class="text-sky-400">WATCH</span></h2>
+      <p class="text-xs text-slate-400">Access key डालिए</p>
+      <input id="loginInput" type="password" class="field" placeholder="Access key" />
+      <p id="loginErr" class="text-xs text-red-400 hidden">गलत key</p>
+      <button onclick="submitLogin()" class="w-full py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-sm">Enter</button>
+    </div>
+  </div>
+
   <header class="sticky top-0 z-30 bg-[#0b1222]/95 backdrop-blur border-b border-slate-800 px-4 py-2.5">
     <div class="max-w-[1550px] mx-auto flex flex-wrap items-center justify-between gap-2">
       <div class="flex items-center gap-2.5">
-        <span id="liveDot" class="h-3 w-3 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span id="liveDot" class="h-3 w-3 rounded-full bg-slate-500"></span>
         <div>
           <h1 class="text-lg font-extrabold tracking-wider text-white leading-tight">
             CIU <span class="text-sky-400">WATCH</span>
             <span class="text-[10px] font-bold ml-1.5 px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30">LIVE RADAR</span>
           </h1>
-          <p class="text-[11px] text-slate-400" id="lastUpdated">Real-Time X, News, Live TV &amp; Account Intelligence</p>
+          <p class="text-[11px] text-slate-400"><span id="lastUpdated">Connecting...</span> · <span id="connText"></span></p>
         </div>
       </div>
 
       <div class="flex flex-wrap items-center gap-1.5 text-xs">
-        <!-- Back-Date Selector -->
         <div class="flex items-center gap-1 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1">
           <span class="text-[11px] text-amber-300 font-semibold">Date:</span>
-          <input id="datePicker" type="date" onchange="onDateChange()"
-            class="bg-transparent text-white text-xs focus:outline-none cursor-pointer" />
-          <button id="liveResetBtn" onclick="resetToLive()"
-            class="hidden ml-1 px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px]">
-            ● LIVE
-          </button>
+          <input id="datePicker" type="date" onchange="onDateChange()" class="bg-transparent text-white text-xs focus:outline-none cursor-pointer" />
+          <button id="liveResetBtn" onclick="resetToLive()" class="hidden ml-1 px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px]">● LIVE</button>
         </div>
 
-        <!-- Custom Refresh Interval Selector (30s / 1m / 2m / 5m / Manual) -->
         <div id="intervalBox" class="flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1">
           <span class="text-[10px] text-slate-400">Refresh:</span>
           <select id="intervalSelect" onchange="changeInterval()" class="bg-slate-900 text-sky-300 text-xs font-bold focus:outline-none cursor-pointer">
-            <option value="30">30 sec</option>
-            <option value="60">1 min</option>
-            <option value="120">2 min</option>
-            <option value="300">5 min</option>
-            <option value="0">Manual</option>
+            <option value="30">30 sec</option><option value="60">1 min</option>
+            <option value="120">2 min</option><option value="300">5 min</option><option value="0">Manual</option>
           </select>
-          <span id="timerPill" class="text-slate-200 text-[11px] pl-1.5 border-l border-slate-700">
-            <b id="timer">30</b>s
-          </span>
+          <span id="timerPill" class="text-slate-200 text-[11px] pl-1.5 border-l border-slate-700"></span>
         </div>
 
         <span id="xBadge" class="px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">Connecting...</span>
         <span id="crisisBadge" class="px-2.5 py-1 rounded-full bg-emerald-950/60 text-emerald-300 border border-emerald-600/40 font-bold">Crisis: 0/100</span>
 
-        <button id="soundBtn" onclick="toggleSound()" class="px-2.5 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 font-semibold">
-          Sound: ON
-        </button>
-        <button id="notifBtn" onclick="enableNotifications()" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700">
-          Popup
-        </button>
-        <button onclick="openBriefModal()" class="px-2.5 py-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-400/50 font-semibold">
-          WhatsApp Brief
-        </button>
-        <button onclick="exportCSV()" class="px-2.5 py-1.5 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-400/50 font-semibold">
-          Excel
-        </button>
-        <button onclick="fetchFeed(true)" class="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-semibold">
-          Scan Now
-        </button>
+        <button id="soundBtn" onclick="toggleSound()" class="px-2.5 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 font-semibold">Sound: ON</button>
+        <button id="notifBtn" onclick="enableNotifications()" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700">Popup</button>
+        <button onclick="openManualModal()" class="px-2.5 py-1.5 rounded-lg bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-400/50 font-semibold">+ FB/IG जोड़ें</button>
+        <button onclick="openBriefModal()" class="px-2.5 py-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-400/50 font-semibold">WhatsApp Brief</button>
+        <button onclick="exportCSV()" class="px-2.5 py-1.5 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-400/50 font-semibold">Excel</button>
+        <button onclick="fetchFeed(true)" class="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-semibold">Scan Now</button>
       </div>
     </div>
 
-    <!-- Priority Keyword Filter Bar -->
     <div class="max-w-[1550px] mx-auto mt-2.5 pt-2.5 border-t border-slate-800/80 flex flex-wrap items-center gap-2">
       <span class="text-xs font-semibold text-amber-400 uppercase tracking-wider mr-1">Priority Keywords:</span>
       <div id="kwChips" class="flex flex-wrap gap-1.5"></div>
       <form onsubmit="addKeyword(event)" class="flex items-center gap-1 ml-auto">
-        <input id="kwInput" type="text" placeholder="Add keyword (e.g. RPSC, JDA)..."
-          class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-sky-500 w-48" />
+        <input id="kwInput" type="text" placeholder="Add keyword (e.g. RPSC, JDA)..." class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-sky-500 w-48" />
         <button class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs px-3 py-1 rounded-lg">+ Add</button>
       </form>
     </div>
   </header>
 
   <main class="max-w-[1550px] mx-auto px-4 py-4">
-    <!-- Archive Back-Date Mode Banner -->
     <div id="archiveBanner" class="hidden mb-3 px-4 py-2.5 rounded-xl bg-amber-500/15 border border-amber-400/50 text-amber-200 text-xs flex flex-wrap items-center justify-between gap-2">
-      <span>📅 <b id="archiveDateText">Back-Date Mode</b> — Is din ke tweets aur news dikh rahe hain (auto-refresh paused hai).</span>
-      <button onclick="resetToLive()" class="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold">
-        Return to Live Feed ↗
-      </button>
+      <span>📅 <b id="archiveDateText">Back-Date Mode</b> — इस दिन के tweets और news दिख रहे हैं (auto-refresh बंद है)।</span>
+      <button onclick="resetToLive()" class="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold">Return to Live Feed ↗</button>
     </div>
-
+    <div id="connBox" class="hidden mb-3 p-3 rounded-xl bg-red-500/10 border border-red-500/40 text-red-200 text-xs"></div>
     <div id="xErrorBox" class="hidden mb-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/40 text-amber-200 text-xs"></div>
 
-    <!-- 2-COLUMN WAR ROOM: LEFT = FEED / ACCOUNTS / LIVE TV | RIGHT = GRAPHS & RADAR -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-
-      <!-- LEFT COLUMN (8/12) -->
       <div class="lg:col-span-8 space-y-3">
         <div class="glass rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2">
-          <div class="flex flex-wrap gap-1.5 text-xs">
-            <button onclick="setSource('ALL')" data-src="ALL" class="src-btn px-2.5 py-1.5 rounded-lg bg-sky-600 text-white font-semibold">All Live</button>
-            <button onclick="setSource('X')" data-src="X" class="src-btn px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-200">X (Twitter)</button>
-            <button onclick="setSource('ACCOUNTS')" data-src="ACCOUNTS" class="src-btn px-2.5 py-1.5 rounded-lg bg-amber-500/20 border border-amber-400/50 text-amber-200 font-semibold">Accounts Tracker</button>
-            <button onclick="setSource('NEWSPAPER')" data-src="NEWSPAPER" class="src-btn px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-300">Newspapers</button>
-            <button onclick="setSource('NEWS')" data-src="NEWS" class="src-btn px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-300">Web News</button>
-            <button onclick="setSource('HINDI')" data-src="HINDI" class="src-btn px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-300">Hindi</button>
-            <button onclick="setSource('ENGLISH')" data-src="ENGLISH" class="src-btn px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-300">English</button>
-            <button onclick="setSource('YOUTUBE')" data-src="YOUTUBE" class="src-btn px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-300">YouTube TV</button>
-            <button onclick="setSource('LIVE_TV')" data-src="LIVE_TV" class="src-btn px-2.5 py-1.5 rounded-lg bg-rose-950/70 border border-rose-600/50 text-rose-300 font-semibold">● LIVE TV</button>
+          <div class="flex flex-wrap gap-1.5 text-xs" id="srcBar">
+            <button data-src="ALL" data-off="bg-slate-800 text-slate-300" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-sky-600 text-white">All Live</button>
+            <button data-src="X" data-off="bg-slate-800 text-slate-300" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-slate-800 text-slate-300">X (Twitter)</button>
+            <button data-src="HANDLES" data-off="bg-sky-500/20 border border-sky-400/50 text-sky-200" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-sky-500/20 border border-sky-400/50 text-sky-200">Handle Analysis</button>
+            <button data-src="ACCOUNTS" data-off="bg-amber-500/20 border border-amber-400/50 text-amber-200" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-amber-500/20 border border-amber-400/50 text-amber-200">Accounts Tracker</button>
+            <button data-src="SOCIAL" data-off="bg-fuchsia-500/20 border border-fuchsia-400/50 text-fuchsia-200" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-fuchsia-500/20 border border-fuchsia-400/50 text-fuchsia-200">FB / IG</button>
+            <button data-src="NEWSPAPER" data-off="bg-slate-800 text-slate-300" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-slate-800 text-slate-300">Newspapers</button>
+            <button data-src="NEWS" data-off="bg-slate-800 text-slate-300" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-slate-800 text-slate-300">Web News</button>
+            <button data-src="HINDI" data-off="bg-slate-800 text-slate-300" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-slate-800 text-slate-300">Hindi</button>
+            <button data-src="ENGLISH" data-off="bg-slate-800 text-slate-300" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-slate-800 text-slate-300">English</button>
+            <button data-src="YOUTUBE" data-off="bg-slate-800 text-slate-300" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-slate-800 text-slate-300">YouTube</button>
+            <button data-src="LIVE_TV" data-off="bg-rose-950/70 border border-rose-600/50 text-rose-300" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-rose-950/70 border border-rose-600/50 text-rose-300">● LIVE TV</button>
             <button id="negOnlyBtn" onclick="toggleSentFilter('negative')" class="px-2.5 py-1.5 rounded-lg bg-red-950/60 border border-red-700/50 text-red-300">Only Negative</button>
             <button id="posOnlyBtn" onclick="toggleSentFilter('positive')" class="px-2.5 py-1.5 rounded-lg bg-emerald-950/60 border border-emerald-700/50 text-emerald-300">Only Positive</button>
           </div>
-
           <div class="flex items-center gap-2">
-            <input id="instantSearch" oninput="renderFeed()" type="text" placeholder="Filter posts / @handle..."
-              class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white w-44 focus:outline-none focus:border-sky-500" />
+            <input id="instantSearch" oninput="renderFeed()" type="text" placeholder="Filter posts / @handle..." class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white w-44 focus:outline-none focus:border-sky-500" />
             <span id="postCount" class="text-xs text-slate-400 whitespace-nowrap">0 posts</span>
           </div>
         </div>
@@ -136,40 +120,67 @@
           <button onclick="clearSubFilters()" class="text-amber-300 font-bold hover:underline">Clear ✕</button>
         </div>
 
-        <!-- ACCOUNT BIFURCATION TAB VIEW -->
+        <!-- HANDLE ANALYSIS -->
+        <div id="handlesView" class="hidden space-y-3">
+          <div class="glass rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span id="handlesSummary" class="text-slate-300"></span>
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-slate-400">Sort by:</span>
+              <select id="hSort" onchange="renderHandles()" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white focus:outline-none">
+                <option value="total">सबसे ज़्यादा tweets</option>
+                <option value="negative">सबसे ज़्यादा Negative</option>
+                <option value="positive">सबसे ज़्यादा Positive</option>
+                <option value="engagement">सबसे ज़्यादा Likes+RT</option>
+              </select>
+              <button onclick="exportHandlesCSV()" class="px-2.5 py-1 rounded-lg bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 font-semibold">Export Handles Excel</button>
+            </div>
+          </div>
+          <div class="glass rounded-xl overflow-x-auto">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr class="bg-slate-900/90 text-slate-400 uppercase text-[10px] border-b border-slate-800">
+                  <th class="py-2.5 px-3">Handle</th>
+                  <th class="py-2.5 px-2 text-center">Tweets</th>
+                  <th class="py-2.5 px-2 text-center text-emerald-400">Pos</th>
+                  <th class="py-2.5 px-2 text-center text-red-400">Neg</th>
+                  <th class="py-2.5 px-2 text-center">Neu</th>
+                  <th class="py-2.5 px-3 w-32">Ratio</th>
+                  <th class="py-2.5 px-3">किस बारे में (विषय / ज़िला)</th>
+                  <th class="py-2.5 px-3">Hashtags</th>
+                  <th class="py-2.5 px-2 text-center">❤ / 🔁</th>
+                  <th class="py-2.5 px-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody id="handlesBody" class="divide-y divide-slate-800/80"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ACCOUNTS -->
         <div id="accountsView" class="hidden space-y-3">
           <div class="glass rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
             <div class="flex flex-wrap items-center gap-1.5">
               <span class="text-slate-400 font-semibold mr-1">Show:</span>
               <button onclick="setAccSource('ALL')" id="accSrcALL" class="px-2.5 py-1 rounded-lg bg-sky-600 text-white font-semibold">All Accounts</button>
-              <button onclick="setAccSource('X')" id="accSrcX" class="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300">Only X Handles</button>
+              <button onclick="setAccSource('X')" id="accSrcX" class="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300">Only X</button>
               <button onclick="setAccSource('MEDIA')" id="accSrcMEDIA" class="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300">News &amp; TV</button>
             </div>
             <div class="flex flex-wrap items-center gap-2">
               <span class="text-slate-400">Sort by:</span>
               <select id="accSort" onchange="renderAccounts()" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white focus:outline-none">
-                <option value="total">Total Posts (High → Low)</option>
-                <option value="negative">Most Negative Posts</option>
-                <option value="positive">Most Positive Posts</option>
+                <option value="total">Total Posts</option><option value="negative">Most Negative</option><option value="positive">Most Positive</option>
               </select>
-              <button onclick="exportAccountsCSV()" class="px-2.5 py-1 rounded-lg bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 font-semibold hover:bg-emerald-600/30">
-                Export Accounts Excel
-              </button>
+              <button onclick="exportAccountsCSV()" class="px-2.5 py-1 rounded-lg bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 font-semibold">Export Accounts Excel</button>
             </div>
           </div>
-
           <div class="glass rounded-xl overflow-x-auto">
             <table class="w-full text-left text-xs border-collapse">
               <thead>
                 <tr class="bg-slate-900/90 text-slate-400 uppercase text-[10px] border-b border-slate-800">
-                  <th class="py-2.5 px-3">Account / Handle</th>
-                  <th class="py-2.5 px-2 text-center">Source</th>
-                  <th class="py-2.5 px-2 text-center">Total</th>
-                  <th class="py-2.5 px-2 text-center text-emerald-400">Positive</th>
-                  <th class="py-2.5 px-2 text-center text-red-400">Negative</th>
-                  <th class="py-2.5 px-2 text-center">Neutral</th>
-                  <th class="py-2.5 px-3 w-40">Pos / Neg Ratio</th>
-                  <th class="py-2.5 px-3 text-right">Action</th>
+                  <th class="py-2.5 px-3">Account</th><th class="py-2.5 px-2 text-center">Source</th>
+                  <th class="py-2.5 px-2 text-center">Total</th><th class="py-2.5 px-2 text-center text-emerald-400">Pos</th>
+                  <th class="py-2.5 px-2 text-center text-red-400">Neg</th><th class="py-2.5 px-2 text-center">Neu</th>
+                  <th class="py-2.5 px-3 w-40">Ratio</th><th class="py-2.5 px-3 text-right">Action</th>
                 </tr>
               </thead>
               <tbody id="accountsTableBody" class="divide-y divide-slate-800/80"></tbody>
@@ -177,16 +188,12 @@
           </div>
         </div>
 
-        <!-- LIVE TV WALL -->
         <div id="liveTvWall" class="hidden grid grid-cols-1 md:grid-cols-2 gap-3"></div>
-
-        <!-- LIVE FEED STREAM -->
         <div id="feed" class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div class="col-span-full text-center py-12 text-slate-400 text-sm">Loading live CIU Watch feeds...</div>
         </div>
       </div>
 
-      <!-- RIGHT SIDEBAR (4/12): STICKY SENTIMENT GRAPHS & RADAR -->
       <aside class="lg:col-span-4 lg:sticky lg:top-28 space-y-3">
         <div class="grid grid-cols-3 gap-2">
           <div class="glass rounded-xl p-2.5 border-red-500/30 text-center">
@@ -200,13 +207,12 @@
             <div class="text-[10px] text-slate-400" id="kpiPosPct">0%</div>
           </div>
           <div class="glass rounded-xl p-2.5 text-center">
-            <div class="text-[10px] text-slate-400 font-bold uppercase">Total / X</div>
+            <div class="text-[10px] text-slate-400 font-bold uppercase">Total</div>
             <div class="text-lg font-extrabold text-white" id="kpiTotal">0</div>
-            <div class="text-[10px] text-sky-400 font-semibold" id="kpiX">0 X · 0 YT</div>
+            <div class="text-[10px] text-sky-400 font-semibold" id="kpiX">0 X</div>
           </div>
         </div>
 
-        <!-- Full-Day Sentiment Graph with All / Only X Toggle -->
         <div class="glass rounded-xl p-3">
           <div class="flex items-center justify-between gap-2 mb-1.5">
             <div>
@@ -218,9 +224,7 @@
               <button onclick="setGraphScope('X')" id="gScopeX" class="px-2 py-0.5 rounded text-slate-300 font-bold">Only X</button>
             </div>
           </div>
-          <div class="h-48">
-            <canvas id="hourlyChart"></canvas>
-          </div>
+          <div class="h-48"><canvas id="hourlyChart"></canvas></div>
         </div>
 
         <div class="glass rounded-xl p-3">
@@ -228,9 +232,7 @@
             <h2 class="text-xs font-bold text-white uppercase tracking-wide" id="donutTitle">Sentiment Ratio (All)</h2>
             <span class="text-[10px] text-slate-400" id="langSplit">HI 0 | EN 0</span>
           </div>
-          <div class="h-36 flex items-center justify-center">
-            <canvas id="donutChart"></canvas>
-          </div>
+          <div class="h-36 flex items-center justify-center"><canvas id="donutChart"></canvas></div>
         </div>
 
         <div class="glass rounded-xl p-3">
@@ -248,744 +250,666 @@
           </div>
           <div id="deptStrip" class="flex flex-wrap gap-1.5"></div>
         </div>
-      </aside>
 
+        <div class="glass rounded-xl p-3">
+          <h3 class="text-xs font-bold uppercase tracking-wide text-slate-300 mb-2">Source Health</h3>
+          <div id="sourcesBox" class="space-y-1 text-[11px]"></div>
+        </div>
+      </aside>
     </div>
   </main>
 
-  <!-- 1-Click WhatsApp Brief Modal -->
+  <!-- BRIEF MODAL -->
   <div id="briefModal" class="fixed inset-0 z-50 hidden bg-black/75 flex items-center justify-center p-4">
     <div class="glass rounded-2xl max-w-2xl w-full p-5 space-y-3">
       <div class="flex items-center justify-between">
-        <h3 class="text-base font-bold text-amber-400">CIU Watch — 1-Click WhatsApp Brief</h3>
-        <button onclick="closeBriefModal()" class="text-slate-400 hover:text-white text-sm font-bold">✕ Close</button>
+        <h3 class="text-base font-bold text-amber-400">CIU Watch — WhatsApp Brief</h3>
+        <button onclick="closeModal('briefModal')" class="text-slate-400 hover:text-white text-sm font-bold">✕ Close</button>
       </div>
       <textarea id="briefText" rows="13" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-slate-200 font-mono focus:outline-none"></textarea>
-      <div class="flex justify-end gap-2">
-        <button onclick="copyBrief()" class="px-4 py-2 rounded-lg text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950">Copy for WhatsApp</button>
-      </div>
+      <div class="flex justify-end"><button onclick="copyBrief()" class="px-4 py-2 rounded-lg text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950">Copy for WhatsApp</button></div>
     </div>
   </div>
 
-  <script>
-    const DEFAULT_KEYWORDS = ["Bhajanlal", "RajCMO", "Rajasthan govt", "Jaipur", "paper leak", "RPSC"];
-    let keywords = JSON.parse(localStorage.getItem("rajwatch_kw") || "null") || [...DEFAULT_KEYWORDS];
-    let scanInterval = parseInt(localStorage.getItem("ciuwatch_interval") || "30", 10);
-    if (![0, 30, 60, 120, 300].includes(scanInterval)) scanInterval = 30;
-    let countdown = scanInterval || 30;
+  <!-- MANUAL FB/IG MODAL -->
+  <div id="manualModal" class="fixed inset-0 z-50 hidden bg-black/75 flex items-center justify-center p-4">
+    <div class="glass rounded-2xl max-w-lg w-full p-5 space-y-2.5">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-fuchsia-300">Facebook / Instagram पोस्ट जोड़ें</h3>
+        <button onclick="closeModal('manualModal')" class="text-slate-400 hover:text-white text-sm font-bold">✕ Close</button>
+      </div>
+      <p class="text-[11px] text-slate-400">कोई public पोस्ट मिले तो यहाँ चिपकाइए। वह बाकी खबरों की तरह गिनी जाएगी।</p>
+      <select id="mPlatform" class="field"><option value="FACEBOOK">Facebook</option><option value="INSTAGRAM">Instagram</option><option value="OTHER">Other</option></select>
+      <input id="mAuthor" class="field" placeholder="किसने लिखा (पेज/अकाउंट का नाम)" maxlength="80" />
+      <textarea id="mText" rows="4" class="field" placeholder="पोस्ट का text" maxlength="1000"></textarea>
+      <input id="mUrl" class="field" placeholder="पोस्ट का लिंक (https://...)" />
+      <div class="grid grid-cols-2 gap-2">
+        <input id="mWhen" type="datetime-local" class="field" />
+        <input id="mLikes" type="number" min="0" class="field" placeholder="Likes (वैकल्पिक)" />
+      </div>
+      <p id="mErr" class="text-xs text-red-400 hidden"></p>
+      <div class="flex justify-end"><button onclick="submitManual()" class="px-4 py-2 rounded-lg text-xs font-bold bg-fuchsia-500 hover:bg-fuchsia-400 text-slate-950">Save</button></div>
+    </div>
+  </div>
 
-    let activeKeywordFilter = null;
-    let currentSource = "ALL";
-    let accSourceFilter = "ALL";
-    let graphScope = "ALL"; // ALL | X
-    let sentFilter = null;
-    let selectedDistrict = null;
-    let selectedDept = null;
-    let selectedAccount = null;
-    let selectedDate = "";
-    let soundOn = true;
-    let allItems = [];
-    let latestPayload = null;
-    let seenIds = new Set();
-    let firstLoad = true;
-    let tvRendered = false;
-    let hourlyChartObj = null;
-    let donutChartObj = null;
+<script>
+  const $ = id => document.getElementById(id);
+  const DEFAULT_KEYWORDS = ["Bhajanlal", "RajCMO", "Rajasthan govt", "Jaipur", "paper leak", "RPSC"];
+  let keywords = JSON.parse(localStorage.getItem("rajwatch_kw") || "null") || [...DEFAULT_KEYWORDS];
+  let scanInterval = parseInt(localStorage.getItem("ciuwatch_interval") || "30", 10);
+  if (![0, 30, 60, 120, 300].includes(scanInterval)) scanInterval = 30;
+  let countdown = scanInterval || 30;
 
-    // Browser-side safety net for today's X tweets (even if server restarts, tweets stay visible)
-    function loadBrowserXBackup(todayStr) {
-      try {
-        const raw = JSON.parse(localStorage.getItem("ciuwatch_x_backup") || "{}");
-        if (raw.date === todayStr && Array.isArray(raw.tweets)) return raw.tweets;
-      } catch (e) {}
-      return [];
+  let activeKeywordFilter = null, currentSource = "ALL", accSourceFilter = "ALL", graphScope = "ALL";
+  let sentFilter = null, selectedDistrict = null, selectedDept = null, selectedAccount = null, selectedHandle = null;
+  let selectedDate = "", soundOn = true, allItems = [], latestPayload = null;
+  let seenIds = new Set(), firstLoad = true, hourlyChartObj = null, donutChartObj = null;
+  let inFlight = false, lastOkTs = 0, failCount = 0, feedSig = "", tvSig = "", audioCtx = null;
+
+  // ---------- helpers ----------
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+  function safeUrl(u) { return /^https?:\/\//i.test(u || "") ? u : "#"; }
+  function csvCell(v) {
+    let s = String(v == null ? "" : v);
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  function downloadCSV(name, rows) {
+    const csv = "\uFEFF" + rows.map(r => r.map(csvCell).join(",")).join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+    a.download = name;
+    a.click();
+  }
+  function timeAgo(ts) {
+    const d = Math.max(1, Math.floor(Date.now() / 1000 - ts));
+    if (d < 60) return d + "s ago";
+    if (d < 3600) return Math.floor(d / 60) + "m ago";
+    if (d < 86400) return Math.floor(d / 3600) + "h ago";
+    return Math.floor(d / 86400) + "d ago";
+  }
+  function timeLabel(it) {
+    if (selectedDate) return it.date_label + ", " + it.time_str;
+    if (it.ts_approx) return "समय अज्ञात";
+    return `<span data-ago="${it.ts}">${timeAgo(it.ts)}</span>`;
+  }
+
+  // ---------- auth / api ----------
+  function authHeaders() { const k = localStorage.getItem("ciuwatch_key") || ""; return k ? { "X-Access-Key": k } : {}; }
+  async function api(path, opts = {}) {
+    opts.headers = Object.assign({}, opts.headers || {}, authHeaders());
+    const r = await fetch(path, opts);
+    if (r.status === 401) { showLogin(); throw new Error("401"); }
+    if (!r.ok) {
+      let msg = "HTTP " + r.status;
+      try { const j = await r.json(); if (j.detail) msg = j.detail; } catch (e) {}
+      throw new Error(msg);
     }
-
-    function saveBrowserXBackup(todayStr, xTweets) {
-      try {
-        localStorage.setItem("ciuwatch_x_backup", JSON.stringify({
-          date: todayStr,
-          tweets: xTweets.slice(0, 150)
-        }));
-      } catch (e) {}
-    }
-
-    function esc(s) {
-      return String(s || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-    }
-
-    function initIntervalUI() {
-      const sel = document.getElementById("intervalSelect");
-      sel.value = String(scanInterval);
-      const pill = document.getElementById("timerPill");
-      if (scanInterval === 0) {
-        pill.innerHTML = `<span class="text-amber-300 font-bold">Paused</span>`;
-      } else {
-        pill.innerHTML = `<b id="timer">${countdown}</b>s`;
-      }
-    }
-
-    function changeInterval() {
-      scanInterval = parseInt(document.getElementById("intervalSelect").value, 10);
-      localStorage.setItem("ciuwatch_interval", String(scanInterval));
-      countdown = scanInterval || 30;
-      initIntervalUI();
-    }
-
-    function setGraphScope(scope) {
-      graphScope = scope;
-      document.getElementById("gScopeALL").className = scope === "ALL"
-        ? "px-2 py-0.5 rounded bg-sky-600 text-white font-bold"
-        : "px-2 py-0.5 rounded text-slate-300 font-bold";
-      document.getElementById("gScopeX").className = scope === "X"
-        ? "px-2 py-0.5 rounded bg-sky-600 text-white font-bold"
-        : "px-2 py-0.5 rounded text-slate-300 font-bold";
-      if (latestPayload) renderCharts(latestPayload);
-    }
-
-    function playBeep(isAlert) {
-      if (!soundOn) return;
-      try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = isAlert ? "sawtooth" : "sine";
-        osc.frequency.value = isAlert ? 880 : 620;
-        gain.gain.value = 0.08;
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        setTimeout(() => { osc.stop(); ctx.close(); }, isAlert ? 320 : 160);
-      } catch (e) {}
-    }
-
-    function toggleSound() {
-      soundOn = !soundOn;
-      const btn = document.getElementById("soundBtn");
-      btn.textContent = soundOn ? "Sound: ON" : "Sound: OFF";
-      btn.className = soundOn
-        ? "px-2.5 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 font-semibold"
-        : "px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-400 border border-slate-700";
-      if (soundOn) playBeep(false);
-    }
-
-    function enableNotifications() {
-      if (!("Notification" in window)) return alert("Ye browser desktop notifications support nahi karta.");
-      Notification.requestPermission().then(p => {
-        if (p === "granted") {
-          document.getElementById("notifBtn").textContent = "Popup: ON";
-          new Notification("CIU Watch Ready", { body: "Naya update aate hi popup milega!" });
-        }
-      });
-    }
-
-    function onDateChange() {
-      const val = document.getElementById("datePicker").value;
-      const today = latestPayload && latestPayload.today_date ? latestPayload.today_date : "";
-      selectedDate = (val && val !== today) ? val : "";
-      selectedAccount = null;
-      firstLoad = true;
-      seenIds.clear();
+    return r.json();
+  }
+  function showLogin() { $("loginBox").classList.remove("hidden"); $("loginInput").focus(); }
+  async function submitLogin() {
+    localStorage.setItem("ciuwatch_key", $("loginInput").value.trim());
+    try {
+      await api("/api/check");
+      $("loginBox").classList.add("hidden");
+      $("loginErr").classList.add("hidden");
       fetchFeed(true);
+    } catch (e) {
+      $("loginErr").classList.remove("hidden");
     }
+  }
+  $("loginInput").addEventListener("keydown", e => { if (e.key === "Enter") submitLogin(); });
 
-    function resetToLive() {
-      selectedDate = "";
-      document.getElementById("datePicker").value = (latestPayload && latestPayload.today_date) || "";
-      selectedAccount = null;
-      firstLoad = true;
-      seenIds.clear();
-      countdown = scanInterval || 30;
-      fetchFeed(true);
-    }
+  // ---------- sound / notifications ----------
+  function playBeep(isAlert) {
+    if (!soundOn) return;
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+      osc.type = isAlert ? "sawtooth" : "sine";
+      osc.frequency.value = isAlert ? 880 : 620;
+      gain.gain.value = 0.08;
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start();
+      setTimeout(() => osc.stop(), isAlert ? 320 : 160);
+    } catch (e) {}
+  }
+  function toggleSound() {
+    soundOn = !soundOn;
+    const b = $("soundBtn");
+    b.textContent = soundOn ? "Sound: ON" : "Sound: OFF";
+    b.className = soundOn
+      ? "px-2.5 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 font-semibold"
+      : "px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-400 border border-slate-700";
+    if (soundOn) playBeep(false);
+  }
+  function enableNotifications() {
+    if (!("Notification" in window)) return alert("यह browser notifications support नहीं करता।");
+    Notification.requestPermission().then(p => {
+      if (p === "granted") { $("notifBtn").textContent = "Popup: ON"; new Notification("CIU Watch Ready", { body: "नया update आते ही popup मिलेगा!" }); }
+    });
+  }
 
-    function renderKeywords() {
-      const box = document.getElementById("kwChips");
-      box.innerHTML = keywords.map((k, idx) => {
-        const active = activeKeywordFilter === k;
-        return `
-          <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs cursor-pointer border ${
-            active ? "bg-amber-500 text-slate-950 border-amber-400 font-bold" : "bg-slate-800/90 text-slate-200 border-slate-700 hover:border-sky-500"
-          }" onclick="toggleKeywordFilter(${idx})">
-            ${esc(k)}
-            <button onclick="removeKeyword(event, ${idx})" class="ml-1 text-[10px] opacity-70 hover:opacity-100">✕</button>
-          </span>`;
-      }).join("");
-    }
-
-    function toggleKeywordFilter(idx) {
-      const k = keywords[idx];
-      activeKeywordFilter = activeKeywordFilter === k ? null : k;
-      renderKeywords();
-      renderFeed();
-    }
-
-    function addKeyword(e) {
-      e.preventDefault();
-      const inp = document.getElementById("kwInput");
-      const val = inp.value.trim();
-      if (val && !keywords.includes(val)) {
-        keywords.unshift(val);
-        localStorage.setItem("rajwatch_kw", JSON.stringify(keywords));
-        renderKeywords();
-        fetchFeed(true);
-      }
-      inp.value = "";
-    }
-
-    function removeKeyword(e, idx) {
-      e.stopPropagation();
-      const k = keywords[idx];
-      keywords.splice(idx, 1);
-      if (activeKeywordFilter === k) activeKeywordFilter = null;
-      localStorage.setItem("rajwatch_kw", JSON.stringify(keywords));
-      renderKeywords();
-      renderFeed();
-    }
-
-    function setSource(src) {
-      currentSource = src;
-      document.querySelectorAll(".src-btn").forEach(b => {
-        const active = b.dataset.src === src;
-        if (b.dataset.src === "LIVE_TV") {
-          b.className = active
-            ? "src-btn px-2.5 py-1.5 rounded-lg bg-rose-600 text-white font-semibold"
-            : "src-btn px-2.5 py-1.5 rounded-lg bg-rose-950/70 border border-rose-600/50 text-rose-300 font-semibold";
-        } else if (b.dataset.src === "ACCOUNTS") {
-          b.className = active
-            ? "src-btn px-2.5 py-1.5 rounded-lg bg-amber-500 text-slate-950 font-bold"
-            : "src-btn px-2.5 py-1.5 rounded-lg bg-amber-500/20 border border-amber-400/50 text-amber-200 font-semibold";
-        } else {
-          b.className = active
-            ? "src-btn px-2.5 py-1.5 rounded-lg bg-sky-600 text-white font-semibold"
-            : "src-btn px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-300";
-        }
-      });
-      renderFeed();
-    }
-
-    function setAccSource(src) {
-      accSourceFilter = src;
-      ["ALL", "X", "MEDIA"].forEach(k => {
-        const el = document.getElementById(`accSrc${k}`);
-        el.className = (k === src)
-          ? "px-2.5 py-1 rounded-lg bg-sky-600 text-white font-semibold"
-          : "px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300";
-      });
-      renderAccounts();
-    }
-
-    function toggleSentFilter(mode) {
-      sentFilter = sentFilter === mode ? null : mode;
-      document.getElementById("negOnlyBtn").className = sentFilter === "negative"
-        ? "px-2.5 py-1.5 rounded-lg bg-red-600 text-white font-semibold"
-        : "px-2.5 py-1.5 rounded-lg bg-red-950/60 border border-red-700/50 text-red-300";
-      document.getElementById("posOnlyBtn").className = sentFilter === "positive"
-        ? "px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold"
-        : "px-2.5 py-1.5 rounded-lg bg-emerald-950/60 border border-emerald-700/50 text-emerald-300";
-      renderFeed();
-    }
-
-    function selectDistrict(encoded) {
-      const d = decodeURIComponent(encoded);
-      selectedDistrict = selectedDistrict === d ? null : d;
-      renderRadars();
-      renderFeed();
-    }
-
-    function selectDept(encoded) {
-      const dp = decodeURIComponent(encoded);
-      selectedDept = selectedDept === dp ? null : dp;
-      renderRadars();
-      renderFeed();
-    }
-
-    function viewAccountPosts(encodedAuthor) {
-      selectedAccount = decodeURIComponent(encodedAuthor);
-      renderRadars();
-      setSource("ALL");
-    }
-
-    function clearSubFilters() {
-      selectedDistrict = null;
-      selectedDept = null;
-      selectedAccount = null;
-      renderRadars();
-      renderFeed();
-    }
-
-    function timeAgo(ts) {
-      const diff = Math.max(1, Math.floor(Date.now() / 1000 - ts));
-      if (diff < 60) return `${diff}s ago`;
-      if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-      if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-      return `${Math.floor(diff / 86400)}d ago`;
-    }
-
-    function highlightText(txt) {
-      let safe = esc(txt);
-      keywords.forEach(k => {
-        if (k.length < 2) return;
-        const re = new RegExp(`(${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
-        safe = safe.replace(re, `<mark class="bg-amber-400/25 text-amber-200 px-1 rounded">$1</mark>`);
-      });
-      return safe;
-    }
-
-    function renderCharts(data) {
-      const useX = graphScope === "X";
-      const chartData = useX ? data.hourly_chart_x : data.hourly_chart;
-
-      document.getElementById("chartTitle").textContent = data.mode === "archive"
-        ? `${useX ? "Only X" : "All"} Sentiment (${data.active_date})`
-        : `${useX ? "Only X Tweets" : "Full-Day All"} Sentiment (IST)`;
-      document.getElementById("graphXCount").textContent = `X tweets counted in graph: ${data.stats.x_today_count}`;
-      document.getElementById("donutTitle").textContent = useX ? "Sentiment Ratio (Only X)" : "Sentiment Ratio (All)";
-
-      const ctx1 = document.getElementById("hourlyChart").getContext("2d");
-      if (hourlyChartObj) hourlyChartObj.destroy();
-      hourlyChartObj = new Chart(ctx1, {
-        type: "line",
-        data: {
-          labels: chartData.labels,
-          datasets: [
-            { label: "Negative", data: chartData.negative, borderColor: "#f87171", backgroundColor: "rgba(248,113,113,0.18)", fill: true, tension: 0.35, borderWidth: 2 },
-            { label: "Positive", data: chartData.positive, borderColor: "#34d399", backgroundColor: "rgba(52,211,153,0.14)", fill: true, tension: 0.35, borderWidth: 2 },
-            { label: "Neutral", data: chartData.neutral, borderColor: "#94a3b8", borderDash: [3, 3], tension: 0.35, borderWidth: 1.3 }
-          ]
-        },
-        options: {
-          animation: false,
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { labels: { color: "#cbd5e1", font: { size: 10 }, boxWidth: 10 } } },
-          scales: {
-            x: { ticks: { color: "#94a3b8", font: { size: 9 } }, grid: { color: "rgba(51,65,85,0.25)" } },
-            y: { beginAtZero: true, ticks: { color: "#94a3b8", font: { size: 9 }, precision: 0 }, grid: { color: "rgba(51,65,85,0.25)" } }
-          }
-        }
-      });
-
-      const donutVals = useX
-        ? [data.stats.x_negative, data.stats.x_positive, data.stats.x_neutral]
-        : [data.stats.negative, data.stats.positive, data.stats.neutral];
-
-      const ctx2 = document.getElementById("donutChart").getContext("2d");
-      if (donutChartObj) donutChartObj.destroy();
-      donutChartObj = new Chart(ctx2, {
-        type: "doughnut",
-        data: {
-          labels: ["Negative", "Positive", "Neutral"],
-          datasets: [{ data: donutVals, backgroundColor: ["#ef4444", "#10b981", "#64748b"], borderWidth: 0 }]
-        },
-        options: {
-          animation: false,
-          responsive: true,
-          maintainAspectRatio: false,
-          cutout: "62%",
-          plugins: { legend: { position: "right", labels: { color: "#cbd5e1", font: { size: 10 }, boxWidth: 10 } } }
-        }
-      });
-    }
-
-    function renderRadars() {
-      if (!latestPayload) return;
-      document.getElementById("districtStrip").innerHTML = (latestPayload.districts || []).map(d => {
-        const active = selectedDistrict === d.name ? "ring-2 ring-amber-400 bg-amber-500/20" : "bg-slate-800/80";
-        const neg = d.negative > 0 ? `<span class="text-red-400 font-bold ml-1">(${d.negative}N)</span>` : "";
-        return `<button onclick="selectDistrict('${encodeURIComponent(d.name)}')" class="px-2 py-1 rounded-md text-[11px] border border-slate-700 text-slate-200 hover:border-amber-400 ${active}">${esc(d.name)}: ${d.total}${neg}</button>`;
-      }).join("");
-
-      document.getElementById("deptStrip").innerHTML = (latestPayload.departments || []).map(dp => {
-        const active = selectedDept === dp.name ? "ring-2 ring-sky-400 bg-sky-500/20" : "bg-slate-800/80";
-        const neg = dp.negative > 0 ? `<span class="text-red-400 font-bold ml-1">(${dp.negative}N)</span>` : "";
-        return `<button onclick="selectDept('${encodeURIComponent(dp.name)}')" class="px-2 py-1 rounded-md text-[11px] border border-slate-700 text-slate-200 hover:border-sky-400 ${active}">${esc(dp.name)}: ${dp.total}${neg}</button>`;
-      }).join("");
-
-      const bar = document.getElementById("subFilterBar");
-      if (selectedDistrict || selectedDept || selectedAccount) {
-        const parts = [];
-        if (selectedAccount) parts.push(`Account: ${selectedAccount}`);
-        if (selectedDistrict) parts.push(`District: ${selectedDistrict}`);
-        if (selectedDept) parts.push(`Dept: ${selectedDept}`);
-        document.getElementById("subFilterText").textContent = "Active Filter → " + parts.join(" | ");
-        bar.classList.remove("hidden");
-      } else {
-        bar.classList.add("hidden");
-      }
-    }
-
-    function renderAccounts() {
-      const tbody = document.getElementById("accountsTableBody");
-      if (!latestPayload || !latestPayload.accounts) {
-        tbody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-slate-400">Loading account data...</td></tr>`;
-        return;
-      }
-
-      const q = document.getElementById("instantSearch").value.trim().toLowerCase();
-      const sortBy = document.getElementById("accSort").value;
-
-      let list = latestPayload.accounts.filter(acc => {
-        if (accSourceFilter === "X" && acc.source !== "X") return false;
-        if (accSourceFilter === "MEDIA" && acc.source === "X") return false;
-        if (sentFilter === "negative" && acc.negative === 0) return false;
-        if (sentFilter === "positive" && acc.positive === 0) return false;
-        if (q && !(acc.author.toLowerCase().includes(q) || acc.source.toLowerCase().includes(q))) return false;
-        return true;
-      });
-
-      list.sort((a, b) => {
-        if (sortBy === "negative") return (b.negative - a.negative) || (b.total - a.total);
-        if (sortBy === "positive") return (b.positive - a.positive) || (b.total - a.total);
-        return (b.total - a.total) || (b.negative - a.negative);
-      });
-
-      document.getElementById("postCount").textContent = `${list.length} accounts`;
-
-      if (!list.length) {
-        tbody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-slate-400">Is filter mein koi account nahi mila.</td></tr>`;
-        return;
-      }
-
-      tbody.innerHTML = list.map(acc => {
-        const srcTag = acc.source === "X"
-          ? `<span class="px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 font-bold text-[10px]">X</span>`
-          : acc.source === "YOUTUBE"
-          ? `<span class="px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30 font-bold text-[10px]">YT</span>`
-          : acc.source === "NEWSPAPER"
-          ? `<span class="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-200 border border-purple-500/30 font-bold text-[10px]">PAPER</span>`
-          : `<span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold text-[10px]">NEWS</span>`;
-
-        const engInfo = acc.source === "X"
-          ? `<div class="text-[10px] text-slate-500 mt-0.5">❤ ${acc.likes} &nbsp; 🔁 ${acc.retweets}</div>`
-          : "";
-
-        return `
-          <tr class="hover:bg-slate-800/50 transition">
-            <td class="py-2.5 px-3">
-              <div class="font-semibold text-slate-100">${esc(acc.author)}</div>
-              ${engInfo}
-            </td>
-            <td class="py-2.5 px-2 text-center">${srcTag}</td>
-            <td class="py-2.5 px-2 text-center font-extrabold text-white">${acc.total}</td>
-            <td class="py-2.5 px-2 text-center font-bold text-emerald-400">${acc.positive} <span class="text-[10px] text-slate-500">(${acc.pos_pct}%)</span></td>
-            <td class="py-2.5 px-2 text-center font-bold text-red-400">${acc.negative} <span class="text-[10px] text-slate-500">(${acc.neg_pct}%)</span></td>
-            <td class="py-2.5 px-2 text-center text-slate-400">${acc.neutral}</td>
-            <td class="py-2.5 px-3">
-              <div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden flex">
-                <div style="width:${acc.pos_pct}%" class="bg-emerald-500" title="Positive ${acc.pos_pct}%"></div>
-                <div style="width:${acc.neg_pct}%" class="bg-red-500" title="Negative ${acc.neg_pct}%"></div>
-                <div style="width:${acc.neu_pct}%" class="bg-slate-600" title="Neutral ${acc.neu_pct}%"></div>
-              </div>
-              <div class="text-[10px] text-slate-400 mt-1">${esc(acc.stance)}</div>
-            </td>
-            <td class="py-2.5 px-3 text-right">
-              <button onclick="viewAccountPosts('${encodeURIComponent(acc.author)}')"
-                class="px-2.5 py-1 rounded-lg bg-sky-600/20 hover:bg-sky-600/40 border border-sky-500/40 text-sky-300 font-semibold text-[11px] whitespace-nowrap">
-                See Posts →
-              </button>
-            </td>
-          </tr>`;
-      }).join("");
-    }
-
-    function renderFeed(newIdSet = new Set()) {
-      const tvWall = document.getElementById("liveTvWall");
-      const accView = document.getElementById("accountsView");
-      const container = document.getElementById("feed");
-
-      if (currentSource === "ACCOUNTS") {
-        container.classList.add("hidden");
-        tvWall.classList.add("hidden");
-        accView.classList.remove("hidden");
-        renderAccounts();
-        return;
-      }
-
-      accView.classList.add("hidden");
-
-      if (currentSource === "LIVE_TV") {
-        container.classList.add("hidden");
-        tvWall.classList.remove("hidden");
-        const streams = (latestPayload && latestPayload.live_tv) || [];
-        document.getElementById("postCount").textContent = `${streams.length} Live TV`;
-        if (!tvRendered && streams.length) {
-          tvWall.innerHTML = streams.map(tv => `
-            <div class="glass rounded-xl overflow-hidden flex flex-col">
-              <div class="aspect-video bg-black">
-                <iframe class="w-full h-full" src="${esc(tv.embed_url)}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
-              </div>
-              <div class="p-3 flex items-center justify-between">
-                <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-600 text-white">● LIVE TV</span>
-                <span class="text-xs text-sky-400 font-semibold">${esc(tv.source)}</span>
-              </div>
-            </div>
-          `).join("");
-          tvRendered = true;
-        }
-        return;
-      }
-
-      tvWall.classList.add("hidden");
-      container.classList.remove("hidden");
-
-      const q = document.getElementById("instantSearch").value.trim().toLowerCase();
-      const filtered = allItems.filter(item => {
-        if (currentSource === "X" && item.source !== "X") return false;
-        if (currentSource === "NEWSPAPER" && item.source !== "NEWSPAPER") return false;
-        if (currentSource === "NEWS" && item.source !== "NEWS") return false;
-        if (currentSource === "YOUTUBE" && item.source !== "YOUTUBE") return false;
-        if (currentSource === "HINDI" && item.language !== "Hindi") return false;
-        if (currentSource === "ENGLISH" && item.language !== "English") return false;
-        if (sentFilter && item.sentiment !== sentFilter) return false;
-        if (selectedDistrict && item.district !== selectedDistrict) return false;
-        if (selectedDept && item.department !== selectedDept) return false;
-        if (selectedAccount && item.author !== selectedAccount) return false;
-        const hay = (item.text + " " + item.author).toLowerCase();
-        if (activeKeywordFilter && !hay.includes(activeKeywordFilter.toLowerCase())) return false;
-        if (q && !hay.includes(q)) return false;
-        return true;
-      });
-
-      document.getElementById("postCount").textContent = `${filtered.length} posts`;
-      if (!filtered.length) {
-        container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400 text-sm">Is date / filter par koi post nahi mili.</div>`;
-        return;
-      }
-
-      container.innerHTML = filtered.map(item => {
-        const isNew = newIdSet.has(item.id);
-        const srcBadge = item.source === "X"
-          ? `<span class="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 font-bold">X LIVE</span>`
-          : item.source === "YOUTUBE"
-          ? `<span class="px-2 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30 font-bold">YOUTUBE</span>`
-          : item.source === "NEWSPAPER"
-          ? `<span class="px-2 py-0.5 rounded bg-purple-500/20 text-purple-200 border border-purple-500/40 font-bold">PAPER</span>`
-          : `<span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">${esc(item.language.toUpperCase())} NEWS</span>`;
-
-        const sentBadge = item.sentiment === "negative"
-          ? `<span class="px-2 py-0.5 rounded bg-red-600 text-white font-bold">NEGATIVE</span>`
-          : item.sentiment === "positive"
-          ? `<span class="px-2 py-0.5 rounded bg-emerald-600/80 text-white font-bold">POSITIVE</span>`
-          : "";
-
-        const newBadge = isNew
-          ? `<span class="px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-extrabold animate-pulse">NEW</span>` : "";
-
-        const borderClass = item.sentiment === "negative"
-          ? "border-red-500/60"
-          : item.sentiment === "positive"
-          ? "border-emerald-500/50"
-          : "border-slate-800";
-
-        return `
-          <article class="rounded-xl p-4 bg-[#0f172a] border ${borderClass} hover:border-sky-500/50 transition flex flex-col justify-between ${isNew ? "new-flash" : ""}">
-            <div>
-              <div class="flex items-center justify-between gap-2 text-[10px] mb-2">
-                <div class="flex items-center gap-1 flex-wrap">
-                  ${srcBadge} ${sentBadge} ${newBadge}
-                  <span class="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300">${esc(item.district)}</span>
-                </div>
-                <span class="text-emerald-300 font-semibold whitespace-nowrap">${selectedDate ? esc(item.date_label + ", " + item.time_str) : timeAgo(item.ts)}</span>
-              </div>
-              <p class="text-xs font-semibold text-sky-300 mb-1 cursor-pointer hover:underline" onclick="viewAccountPosts('${encodeURIComponent(item.author)}')">${esc(item.author)}</p>
-              <p class="text-[13px] text-slate-100 leading-relaxed mb-3 break-words">${highlightText(item.text)}</p>
-            </div>
-            <div class="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-800/80">
-              <span>${item.source === "X" ? `❤ ${item.likes} &nbsp; 🔁 ${item.retweets}` : esc(item.department)} · ${esc(item.date_label)} ${esc(item.time_str)}</span>
-              <a href="${esc(item.url)}" target="_blank" rel="noopener" class="text-sky-400 hover:underline font-semibold">Open ↗</a>
-            </div>
-          </article>`;
-      }).join("");
-    }
-
-    function openBriefModal() {
-      if (!latestPayload) return;
-      const s = latestPayload.stats;
-      const topNeg = allItems.filter(i => i.sentiment === "negative").slice(0, 5);
-      const topNegAccs = (latestPayload.accounts || []).filter(a => a.negative > 0).sort((a, b) => b.negative - a.negative).slice(0, 4);
-
-      let text = `📊 *CIU WATCH — DAILY MEDIA & X BRIEF (${latestPayload.active_date})*\n`;
-      text += `🕒 Updated: ${latestPayload.updated_at}\n`;
-      text += `🚨 Crisis Score: ${s.crisis_score}/100\n\n`;
-      text += `📈 *SENTIMENT (Total ${s.total} | X: ${s.x_count} | News: ${s.news_count})*\n`;
-      text += `🔴 Negative: ${s.negative} (${s.negative_pct}%)\n`;
-      text += `🟢 Positive: ${s.positive} (${s.positive_pct}%)\n`;
-      text += `⚪ Neutral: ${s.neutral} (${s.neutral_pct}%)\n\n`;
-      if (topNegAccs.length) {
-        text += `👤 *TOP NEGATIVE ACCOUNTS:*\n`;
-        topNegAccs.forEach((a, i) => { text += `${i + 1}. ${a.author} — ${a.total} posts (${a.negative} Neg / ${a.positive} Pos)\n`; });
-        text += `\n`;
-      }
-      text += `🚨 *TOP NEGATIVE ALERTS:*\n`;
-      topNeg.forEach((n, i) => { text += `${i + 1}. [${n.source} | ${n.author}] ${n.text.slice(0, 140)}\n`; });
-
-      document.getElementById("briefText").value = text;
-      document.getElementById("briefModal").classList.remove("hidden");
-    }
-
-    function closeBriefModal() { document.getElementById("briefModal").classList.add("hidden"); }
-    function copyBrief() {
-      const ta = document.getElementById("briefText");
-      ta.select();
-      navigator.clipboard.writeText(ta.value);
-      alert("WhatsApp Brief copy ho gaya!");
-    }
-
-    function exportCSV() {
-      if (!allItems.length) return;
-      let csv = "\uFEFFDate,Time (IST),Source,Author,Language,Sentiment,District,Department,Text,Link\n";
-      allItems.forEach(i => {
-        const row = [
-          i.date_ist, i.time_str, i.source, i.author, i.language, i.sentiment,
-          i.district, i.department, i.text.replace(/"/g, '""'), i.url
-        ].map(v => `"${v}"`).join(",");
-        csv += row + "\n";
-      });
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = `CIU_Watch_Feed_${(latestPayload && latestPayload.active_date) || "report"}.csv`;
-      link.click();
-    }
-
-    function exportAccountsCSV() {
-      if (!latestPayload || !latestPayload.accounts) return;
-      let csv = "\uFEFFAccount,Source,Total Posts,Positive,Positive %,Negative,Negative %,Neutral,Stance,Likes,Retweets\n";
-      latestPayload.accounts.forEach(a => {
-        const row = [
-          a.author, a.source, a.total, a.positive, a.pos_pct,
-          a.negative, a.neg_pct, a.neutral, a.stance, a.likes, a.retweets
-        ].map(v => `"${v}"`).join(",");
-        csv += row + "\n";
-      });
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = `CIU_Watch_Accounts_${latestPayload.active_date}.csv`;
-      link.click();
-    }
-
-    async function fetchFeed(force = false) {
-      countdown = scanInterval || 30;
-      try {
-        const dateParam = selectedDate ? `&date=${encodeURIComponent(selectedDate)}` : "";
-        const res = await fetch(`/api/feed?keywords=${encodeURIComponent(keywords.join(","))}&force=${force}${dateParam}`);
-        const data = await res.json();
-        latestPayload = data;
-        const isArchive = data.mode === "archive";
-
-        // Client-side merge safety net in Live mode so X tweets NEVER vanish even if server restarts
-        let items = data.items || [];
-        if (!isArchive && data.today_date) {
-          const serverX = items.filter(i => i.source === "X");
-          const savedX = loadBrowserXBackup(data.today_date);
-          const mergedXMap = new Map();
-          savedX.forEach(t => mergedXMap.set(t.id, t));
-          serverX.forEach(t => mergedXMap.set(t.id, t));
-          const mergedX = Array.from(mergedXMap.values());
-          saveBrowserXBackup(data.today_date, mergedX);
-
-          const nonX = items.filter(i => i.source !== "X");
-          items = [...mergedX, ...nonX].sort((a, b) => b.ts - a.ts);
-          data.stats.x_count = mergedX.length;
-          data.stats.total = items.length;
-        }
-
-        const s = data.stats;
-        const dp = document.getElementById("datePicker");
-        if (data.today_date) dp.max = data.today_date;
-        if (!dp.value && data.active_date) dp.value = data.active_date;
-
-        document.getElementById("archiveBanner").classList.toggle("hidden", !isArchive);
-        document.getElementById("liveResetBtn").classList.toggle("hidden", !isArchive);
-        document.getElementById("intervalBox").classList.toggle("hidden", isArchive);
-        document.getElementById("liveDot").className = isArchive
-          ? "h-3 w-3 rounded-full bg-amber-400"
-          : "h-3 w-3 rounded-full bg-emerald-400 animate-pulse";
-        if (isArchive) {
-          document.getElementById("archiveDateText").textContent = `Archive Date: ${data.active_date}`;
-        }
-
-        document.getElementById("lastUpdated").textContent = isArchive
-          ? `Showing Archive: ${data.active_date} (Updated ${data.updated_at})`
-          : `Updated: ${data.updated_at}`;
-
-        document.getElementById("kpiNeg").textContent = s.negative;
-        document.getElementById("kpiNegPct").textContent = `${s.negative_pct}%`;
-        document.getElementById("kpiPos").textContent = s.positive;
-        document.getElementById("kpiPosPct").textContent = `${s.positive_pct}%`;
-        document.getElementById("kpiTotal").textContent = s.total;
-        document.getElementById("kpiX").textContent = `${s.x_count} X · ${s.yt_count} YT`;
-        document.getElementById("langSplit").textContent = `HI ${s.hindi_count} | EN ${s.english_count}`;
-
-        const xBadge = document.getElementById("xBadge");
-        const xErr = document.getElementById("xErrorBox");
-        if (data.x_status.startsWith("live")) {
-          xBadge.textContent = isArchive ? `X: ARCHIVE (${s.x_count})` : `X: LIVE (${s.x_count})`;
-          xBadge.className = "px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold";
-          xErr.classList.add("hidden");
-        } else {
-          xBadge.textContent = `X: Cached (${s.x_count})`;
-          xBadge.className = "px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold";
-          xErr.textContent = data.x_error || "Render Environment mein X_AUTH_TOKEN aur X_CT0 check karein.";
-          xErr.classList.remove("hidden");
-        }
-
-        const cb = document.getElementById("crisisBadge");
-        if (s.crisis_score >= 60) {
-          cb.textContent = `Crisis: ${s.crisis_score}/100 (HIGH)`;
-          cb.className = "px-2.5 py-1 rounded-full bg-red-950/80 text-red-300 border border-red-500 font-bold";
-        } else if (s.crisis_score >= 30) {
-          cb.textContent = `Crisis: ${s.crisis_score}/100 (MED)`;
-          cb.className = "px-2.5 py-1 rounded-full bg-amber-950/80 text-amber-300 border border-amber-500 font-bold";
-        } else {
-          cb.textContent = `Crisis: ${s.crisis_score}/100 (SAFE)`;
-          cb.className = "px-2.5 py-1 rounded-full bg-emerald-950/60 text-emerald-300 border border-emerald-600/40 font-bold";
-        }
-
-        const newIds = new Set();
-        let hasAlert = false;
-        let newestItem = null;
-        items.forEach(item => {
-          if (!seenIds.has(item.id)) {
-            seenIds.add(item.id);
-            if (!firstLoad && !isArchive) {
-              newIds.add(item.id);
-              if (!newestItem) newestItem = item;
-              if (item.sentiment === "negative") hasAlert = true;
-            }
-          }
-        });
-
-        allItems = items;
-        renderCharts(data);
-        renderRadars();
-        renderFeed(newIds);
-
-        if (!firstLoad && !isArchive && newIds.size > 0) {
-          playBeep(hasAlert);
-          if ("Notification" in window && Notification.permission === "granted" && newestItem) {
-            new Notification(`CIU Watch — ${newestItem.source} (${newestItem.author})`, { body: newestItem.text.slice(0, 120) });
-          }
-        }
-        firstLoad = false;
-      } catch (e) {
-        console.error(e);
-      }
-    }
-
+  // ---------- interval / date ----------
+  function initIntervalUI() {
+    $("intervalSelect").value = String(scanInterval);
+    $("timerPill").innerHTML = scanInterval === 0 ? '<span class="text-amber-300 font-bold">Paused</span>' : `<b id="timer">${countdown}</b>s`;
+  }
+  function changeInterval() {
+    scanInterval = parseInt($("intervalSelect").value, 10);
+    localStorage.setItem("ciuwatch_interval", String(scanInterval));
+    countdown = scanInterval || 30;
     initIntervalUI();
-    renderKeywords();
-    fetchFeed(false);
+  }
+  function onDateChange() {
+    const val = $("datePicker").value;
+    const today = latestPayload && latestPayload.today_date ? latestPayload.today_date : "";
+    selectedDate = (val && val !== today) ? val : "";
+    resetFilters(); firstLoad = true; seenIds.clear(); feedSig = ""; fetchFeed(true);
+  }
+  function resetToLive() {
+    selectedDate = "";
+    $("datePicker").value = (latestPayload && latestPayload.today_date) || "";
+    resetFilters(); firstLoad = true; seenIds.clear(); feedSig = "";
+    countdown = scanInterval || 30;
+    fetchFeed(true);
+  }
+  function resetFilters() { selectedAccount = null; selectedHandle = null; selectedDistrict = null; selectedDept = null; }
 
-    setInterval(() => {
-      if (selectedDate || scanInterval === 0) return;
-      countdown--;
-      if (countdown <= 0) fetchFeed(false);
-      const tEl = document.getElementById("timer");
-      if (tEl) tEl.textContent = countdown;
-    }, 1000);
-  </script>
+  // ---------- keywords ----------
+  function renderKeywords() {
+    $("kwChips").innerHTML = keywords.map((k, i) => {
+      const active = activeKeywordFilter === k;
+      return `<span data-act="kwfilter" data-val="${i}" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs cursor-pointer border ${active ? "bg-amber-500 text-slate-950 border-amber-400 font-bold" : "bg-slate-800/90 text-slate-200 border-slate-700 hover:border-sky-500"}">${esc(k)}<button data-act="kwremove" data-val="${i}" class="ml-1 text-[10px] opacity-70 hover:opacity-100">✕</button></span>`;
+    }).join("");
+  }
+  function addKeyword(e) {
+    e.preventDefault();
+    const inp = $("kwInput"), val = inp.value.trim();
+    if (val && val.length <= 40 && !val.includes(":") && !keywords.includes(val)) {
+      keywords.unshift(val);
+      localStorage.setItem("rajwatch_kw", JSON.stringify(keywords));
+      renderKeywords(); fetchFeed(true);
+    }
+    inp.value = "";
+  }
+
+  // ---------- filters ----------
+  function setSource(src) {
+    currentSource = src;
+    document.querySelectorAll(".src-btn").forEach(b => {
+      b.className = "src-btn px-2.5 py-1.5 rounded-lg font-semibold " + (b.dataset.src === src ? "bg-sky-600 text-white" : b.dataset.off);
+    });
+    feedSig = "";
+    renderFeed();
+  }
+  function setAccSource(src) {
+    accSourceFilter = src;
+    ["ALL", "X", "MEDIA"].forEach(k => {
+      $("accSrc" + k).className = k === src ? "px-2.5 py-1 rounded-lg bg-sky-600 text-white font-semibold" : "px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300";
+    });
+    renderAccounts();
+  }
+  function setGraphScope(scope) {
+    graphScope = scope;
+    $("gScopeALL").className = scope === "ALL" ? "px-2 py-0.5 rounded bg-sky-600 text-white font-bold" : "px-2 py-0.5 rounded text-slate-300 font-bold";
+    $("gScopeX").className = scope === "X" ? "px-2 py-0.5 rounded bg-sky-600 text-white font-bold" : "px-2 py-0.5 rounded text-slate-300 font-bold";
+    if (latestPayload) renderCharts(latestPayload);
+  }
+  function toggleSentFilter(mode) {
+    sentFilter = sentFilter === mode ? null : mode;
+    $("negOnlyBtn").className = sentFilter === "negative" ? "px-2.5 py-1.5 rounded-lg bg-red-600 text-white font-semibold" : "px-2.5 py-1.5 rounded-lg bg-red-950/60 border border-red-700/50 text-red-300";
+    $("posOnlyBtn").className = sentFilter === "positive" ? "px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold" : "px-2.5 py-1.5 rounded-lg bg-emerald-950/60 border border-emerald-700/50 text-emerald-300";
+    feedSig = "";
+    renderFeed();
+  }
+  function clearSubFilters() { resetFilters(); feedSig = ""; renderRadars(); renderFeed(); }
+
+  // ---------- global click delegation (safe: no inline JS with data) ----------
+  document.addEventListener("click", e => {
+    const sb = e.target.closest(".src-btn");
+    if (sb) { setSource(sb.dataset.src); return; }
+    const el = e.target.closest("[data-act]");
+    if (!el) return;
+    e.stopPropagation();
+    const v = el.dataset.val || "";
+    switch (el.dataset.act) {
+      case "kwfilter": { const k = keywords[+v]; activeKeywordFilter = activeKeywordFilter === k ? null : k; renderKeywords(); feedSig = ""; renderFeed(); break; }
+      case "kwremove": { const k = keywords[+v]; keywords.splice(+v, 1); if (activeKeywordFilter === k) activeKeywordFilter = null; localStorage.setItem("rajwatch_kw", JSON.stringify(keywords)); renderKeywords(); fetchFeed(true); break; }
+      case "district": selectedDistrict = selectedDistrict === v ? null : v; feedSig = ""; renderRadars(); renderFeed(); break;
+      case "dept": selectedDept = selectedDept === v ? null : v; feedSig = ""; renderRadars(); renderFeed(); break;
+      case "account": selectedAccount = v; selectedHandle = null; feedSig = ""; renderRadars(); setSource("ALL"); break;
+      case "handle": selectedHandle = v; selectedAccount = null; feedSig = ""; renderRadars(); setSource("X"); break;
+      case "delmanual": if (confirm("यह पोस्ट हटानी है?")) api("/api/manual/" + encodeURIComponent(v), { method: "DELETE" }).then(() => fetchFeed(true)); break;
+      case "playtv": playTv(+v); break;
+    }
+  });
+
+  // ---------- rendering ----------
+  function highlightText(txt) {
+    const ks = keywords.filter(k => k.length >= 2).map(k => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    if (!ks.length) return esc(txt);
+    const re = new RegExp("(" + ks.join("|") + ")", "gi");
+    return String(txt || "").split(re).map((part, i) => i % 2 === 1 ? `<mark class="bg-amber-400/25 text-amber-200 px-1 rounded">${esc(part)}</mark>` : esc(part)).join("");
+  }
+
+  function mkLine(chart, labels, neg, pos, neu) {
+    chart.data.labels = labels;
+    chart.data.datasets[0].data = neg; chart.data.datasets[1].data = pos; chart.data.datasets[2].data = neu;
+    chart.update("none");
+  }
+  function renderCharts(data) {
+    const useX = graphScope === "X";
+    const cd = useX ? data.hourly_chart_x : data.hourly_chart;
+    $("chartTitle").textContent = (useX ? "Only X" : "All") + (data.mode === "archive" ? ` Sentiment (${data.active_date})` : " Sentiment (IST)");
+    $("graphXCount").textContent = "X tweets counted in graph: " + data.stats.x_today_count;
+    $("donutTitle").textContent = useX ? "Sentiment Ratio (Only X)" : "Sentiment Ratio (All)";
+
+    if (!hourlyChartObj) {
+      hourlyChartObj = new Chart($("hourlyChart").getContext("2d"), {
+        type: "line",
+        data: { labels: [], datasets: [
+          { label: "Negative", data: [], borderColor: "#f87171", backgroundColor: "rgba(248,113,113,0.18)", fill: true, tension: 0.35, borderWidth: 2 },
+          { label: "Positive", data: [], borderColor: "#34d399", backgroundColor: "rgba(52,211,153,0.14)", fill: true, tension: 0.35, borderWidth: 2 },
+          { label: "Neutral", data: [], borderColor: "#94a3b8", borderDash: [3, 3], tension: 0.35, borderWidth: 1.3 } ] },
+        options: { animation: false, responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: "#cbd5e1", font: { size: 10 }, boxWidth: 10 } } },
+          scales: { x: { ticks: { color: "#94a3b8", font: { size: 9 } }, grid: { color: "rgba(51,65,85,0.25)" } },
+                    y: { beginAtZero: true, ticks: { color: "#94a3b8", font: { size: 9 }, precision: 0 }, grid: { color: "rgba(51,65,85,0.25)" } } } }
+      });
+    }
+    mkLine(hourlyChartObj, cd.labels, cd.negative, cd.positive, cd.neutral);
+
+    const s = data.stats;
+    const dv = useX ? [s.x_negative, s.x_positive, s.x_neutral] : [s.negative, s.positive, s.neutral];
+    if (!donutChartObj) {
+      donutChartObj = new Chart($("donutChart").getContext("2d"), {
+        type: "doughnut",
+        data: { labels: ["Negative", "Positive", "Neutral"], datasets: [{ data: dv, backgroundColor: ["#ef4444", "#10b981", "#64748b"], borderWidth: 0 }] },
+        options: { animation: false, responsive: true, maintainAspectRatio: false, cutout: "62%",
+          plugins: { legend: { position: "right", labels: { color: "#cbd5e1", font: { size: 10 }, boxWidth: 10 } } } }
+      });
+    } else { donutChartObj.data.datasets[0].data = dv; donutChartObj.update("none"); }
+  }
+
+  function renderRadars() {
+    if (!latestPayload) return;
+    $("districtStrip").innerHTML = (latestPayload.districts || []).map(d => {
+      const active = selectedDistrict === d.name ? "ring-2 ring-amber-400 bg-amber-500/20" : "bg-slate-800/80";
+      const neg = d.negative > 0 ? `<span class="text-red-400 font-bold ml-1">(${d.negative}N)</span>` : "";
+      return `<button data-act="district" data-val="${esc(d.name)}" class="px-2 py-1 rounded-md text-[11px] border border-slate-700 text-slate-200 hover:border-amber-400 ${active}">${esc(d.name)}: ${d.total}${neg}</button>`;
+    }).join("");
+    $("deptStrip").innerHTML = (latestPayload.departments || []).map(d => {
+      const active = selectedDept === d.name ? "ring-2 ring-sky-400 bg-sky-500/20" : "bg-slate-800/80";
+      const neg = d.negative > 0 ? `<span class="text-red-400 font-bold ml-1">(${d.negative}N)</span>` : "";
+      return `<button data-act="dept" data-val="${esc(d.name)}" class="px-2 py-1 rounded-md text-[11px] border border-slate-700 text-slate-200 hover:border-sky-400 ${active}">${esc(d.name)}: ${d.total}${neg}</button>`;
+    }).join("");
+
+    const parts = [];
+    if (selectedAccount) parts.push("Account: " + selectedAccount);
+    if (selectedHandle) parts.push("Handle: " + selectedHandle);
+    if (selectedDistrict) parts.push("District: " + selectedDistrict);
+    if (selectedDept) parts.push("Dept: " + selectedDept);
+    $("subFilterBar").classList.toggle("hidden", !parts.length);
+    $("subFilterText").textContent = "Active Filter → " + parts.join(" | ");
+
+    $("sourcesBox").innerHTML = (latestPayload.sources || []).map(s => {
+      const dot = s.ok ? "bg-emerald-400" : "bg-red-500";
+      const age = s.last_ok_s == null ? "कभी नहीं" : (s.last_ok_s < 90 ? s.last_ok_s + "s" : Math.floor(s.last_ok_s / 60) + "m") + " पहले";
+      return `<div class="flex items-start gap-2"><span class="mt-1 h-2 w-2 rounded-full ${dot} shrink-0"></span><div class="flex-1"><span class="text-slate-200">${esc(s.name)}</span> <span class="text-slate-500">· आख़िरी सफल: ${age}</span>${s.ok ? "" : `<div class="text-red-400 text-[10px]">${esc(s.error)}</div>`}</div></div>`;
+    }).join("") || '<span class="text-slate-500">अभी कोई डेटा नहीं</span>';
+  }
+
+  function pctBar(p, n, u) {
+    return `<div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden flex">
+      <div style="width:${p}%" class="bg-emerald-500"></div><div style="width:${n}%" class="bg-red-500"></div><div style="width:${u}%" class="bg-slate-600"></div></div>`;
+  }
+
+  function renderHandles() {
+    const tbody = $("handlesBody");
+    const all = (latestPayload && latestPayload.handles) || [];
+    const q = $("instantSearch").value.trim().toLowerCase();
+    const sortBy = $("hSort").value;
+    let list = all.filter(h => {
+      if (q && !(h.handle + " " + h.name).toLowerCase().includes(q)) return false;
+      if (sentFilter === "negative" && !h.negative) return false;
+      if (sentFilter === "positive" && !h.positive) return false;
+      return true;
+    });
+    list.sort((a, b) => {
+      if (sortBy === "negative") return (b.negative - a.negative) || (b.total - a.total);
+      if (sortBy === "positive") return (b.positive - a.positive) || (b.total - a.total);
+      if (sortBy === "engagement") return ((b.likes + b.retweets) - (a.likes + a.retweets)) || (b.total - a.total);
+      return (b.total - a.total) || (b.negative - a.negative);
+    });
+    const totalTweets = all.reduce((s, h) => s + h.total, 0);
+    $("handlesSummary").textContent = `${all.length} handles · ${totalTweets} tweets (${latestPayload ? latestPayload.active_date : ""}${selectedDate ? "" : ", पिछले 24 घंटे"})`;
+    $("postCount").textContent = list.length + " handles";
+    if (!list.length) { tbody.innerHTML = '<tr><td colspan="10" class="py-8 text-center text-slate-400">कोई handle नहीं मिला।</td></tr>'; return; }
+    tbody.innerHTML = list.map(h => {
+      const topics = (h.topics || []).map(t => `<span class="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-200 border border-sky-500/30">${esc(t.name)} ×${t.count}</span>`).join(" ");
+      const dists = (h.districts || []).map(t => `<span class="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-200 border border-amber-500/30">${esc(t.name)} ×${t.count}</span>`).join(" ");
+      const tags = (h.hashtags || []).map(t => `<span class="text-fuchsia-300">${esc(t.name)} <span class="text-slate-500">×${t.count}</span></span>`).join("<br>") || '<span class="text-slate-600">—</span>';
+      const worst = h.worst ? `<a href="${esc(safeUrl(h.worst.url))}" target="_blank" rel="noopener noreferrer" title="${esc(h.worst.text)}" class="block text-[10px] text-red-300 hover:underline mt-1">सबसे तीखा tweet ↗</a>` : "";
+      return `<tr class="hover:bg-slate-800/50 transition align-top">
+        <td class="py-2.5 px-3"><div class="font-semibold text-sky-300">${esc(h.handle)}</div><div class="text-[10px] text-slate-500">${esc(h.name)}</div></td>
+        <td class="py-2.5 px-2 text-center font-extrabold text-white">${h.total}</td>
+        <td class="py-2.5 px-2 text-center font-bold text-emerald-400">${h.positive}<div class="text-[10px] text-slate-500">${h.pos_pct}%</div></td>
+        <td class="py-2.5 px-2 text-center font-bold text-red-400">${h.negative}<div class="text-[10px] text-slate-500">${h.neg_pct}%</div></td>
+        <td class="py-2.5 px-2 text-center text-slate-400">${h.neutral}</td>
+        <td class="py-2.5 px-3">${pctBar(h.pos_pct, h.neg_pct, h.neu_pct)}</td>
+        <td class="py-2.5 px-3 text-[10px] space-y-1"><div class="flex flex-wrap gap-1">${topics}</div><div class="flex flex-wrap gap-1">${dists}</div></td>
+        <td class="py-2.5 px-3 text-[11px]">${tags}</td>
+        <td class="py-2.5 px-2 text-center text-[11px] text-slate-300">❤ ${h.likes}<br>🔁 ${h.retweets}</td>
+        <td class="py-2.5 px-3 text-right"><button data-act="handle" data-val="${esc(h.handle)}" class="px-2.5 py-1 rounded-lg bg-sky-600/20 hover:bg-sky-600/40 border border-sky-500/40 text-sky-300 font-semibold text-[11px] whitespace-nowrap">Tweets →</button>${worst}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  function renderAccounts() {
+    const tbody = $("accountsTableBody");
+    if (!latestPayload || !latestPayload.accounts) { tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-400">Loading...</td></tr>'; return; }
+    const q = $("instantSearch").value.trim().toLowerCase(), sortBy = $("accSort").value;
+    let list = latestPayload.accounts.filter(a => {
+      if (accSourceFilter === "X" && a.source !== "X") return false;
+      if (accSourceFilter === "MEDIA" && a.source === "X") return false;
+      if (sentFilter === "negative" && !a.negative) return false;
+      if (sentFilter === "positive" && !a.positive) return false;
+      if (q && !(a.author.toLowerCase().includes(q) || a.source.toLowerCase().includes(q))) return false;
+      return true;
+    });
+    list.sort((a, b) => sortBy === "negative" ? (b.negative - a.negative) || (b.total - a.total)
+      : sortBy === "positive" ? (b.positive - a.positive) || (b.total - a.total) : (b.total - a.total) || (b.negative - a.negative));
+    $("postCount").textContent = list.length + " accounts";
+    if (!list.length) { tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-400">कोई account नहीं मिला।</td></tr>'; return; }
+    const tag = { X: ["sky", "X"], YOUTUBE: ["red", "YT"], NEWSPAPER: ["purple", "PAPER"], FACEBOOK: ["fuchsia", "FB"], INSTAGRAM: ["pink", "IG"] };
+    tbody.innerHTML = list.map(a => {
+      const t = tag[a.source] || ["emerald", "NEWS"];
+      return `<tr class="hover:bg-slate-800/50 transition">
+        <td class="py-2.5 px-3"><div class="font-semibold text-slate-100">${esc(a.author)}</div></td>
+        <td class="py-2.5 px-2 text-center"><span class="px-1.5 py-0.5 rounded bg-${t[0]}-500/20 text-${t[0]}-300 border border-${t[0]}-500/30 font-bold text-[10px]">${t[1]}</span></td>
+        <td class="py-2.5 px-2 text-center font-extrabold text-white">${a.total}</td>
+        <td class="py-2.5 px-2 text-center font-bold text-emerald-400">${a.positive} <span class="text-[10px] text-slate-500">(${a.pos_pct}%)</span></td>
+        <td class="py-2.5 px-2 text-center font-bold text-red-400">${a.negative} <span class="text-[10px] text-slate-500">(${a.neg_pct}%)</span></td>
+        <td class="py-2.5 px-2 text-center text-slate-400">${a.neutral}</td>
+        <td class="py-2.5 px-3">${pctBar(a.pos_pct, a.neg_pct, a.neu_pct)}<div class="text-[10px] text-slate-400 mt-1">${esc(a.stance)}</div></td>
+        <td class="py-2.5 px-3 text-right"><button data-act="account" data-val="${esc(a.author)}" class="px-2.5 py-1 rounded-lg bg-sky-600/20 hover:bg-sky-600/40 border border-sky-500/40 text-sky-300 font-semibold text-[11px] whitespace-nowrap">See Posts →</button></td>
+      </tr>`;
+    }).join("");
+  }
+
+  function showView(name) {
+    ["feed", "accountsView", "handlesView", "liveTvWall"].forEach(id => $(id).classList.toggle("hidden", id !== name));
+  }
+
+  function playTv(i) {
+    const s = ((latestPayload && latestPayload.live_tv) || [])[i];
+    const box = document.getElementById("tvbox" + i);
+    if (!s || !box || !/^https:\/\/www\.youtube\.com\//.test(s.embed_url)) return;
+    box.innerHTML = `<iframe class="w-full h-full" src="${esc(s.embed_url)}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
+  }
+
+  function srcBadge(it) {
+    const m = {
+      X: ["sky", "X LIVE"], YOUTUBE: ["red", "YOUTUBE"], NEWSPAPER: ["purple", "PAPER"],
+      FACEBOOK: ["fuchsia", "FACEBOOK"], INSTAGRAM: ["pink", "INSTAGRAM"]
+    }[it.source] || ["emerald", (it.language || "").toUpperCase() + " NEWS"];
+    return `<span class="px-2 py-0.5 rounded bg-${m[0]}-500/20 text-${m[0]}-300 border border-${m[0]}-500/30 font-bold">${esc(m[1])}</span>`;
+  }
+
+  function renderFeed(newIdSet = new Set()) {
+    if (currentSource === "ACCOUNTS") { showView("accountsView"); renderAccounts(); return; }
+    if (currentSource === "HANDLES") { showView("handlesView"); renderHandles(); return; }
+    if (currentSource === "LIVE_TV") {
+      showView("liveTvWall");
+      const streams = (latestPayload && latestPayload.live_tv) || [];
+      $("postCount").textContent = streams.length + " channels";
+      const sig = JSON.stringify(streams.map(s => [s.source, s.embed_url, s.is_live]));
+      if (sig !== tvSig) {
+        tvSig = sig;
+        $("liveTvWall").innerHTML = streams.map((s, i) => `
+          <div class="glass rounded-xl overflow-hidden flex flex-col">
+            <div id="tvbox${i}" class="aspect-video bg-black flex items-center justify-center relative">
+              ${s.thumb ? `<img src="${esc(s.thumb)}" class="absolute inset-0 w-full h-full object-cover opacity-60" alt="">` : ""}
+              <button data-act="playtv" data-val="${i}" class="relative z-10 px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm">▶ चलाएँ</button>
+            </div>
+            <div class="p-3 flex items-center justify-between">
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded ${s.is_live ? "bg-rose-600 text-white" : "bg-slate-700 text-slate-300"}">${s.is_live ? "● LIVE" : "अभी live नहीं / अज्ञात"}</span>
+              <a href="${esc(safeUrl(s.watch_url))}" target="_blank" rel="noopener noreferrer" class="text-xs text-sky-400 font-semibold">${esc(s.source)} ↗</a>
+            </div>
+          </div>`).join("");
+      }
+      return;
+    }
+
+    showView("feed");
+    const container = $("feed");
+    const q = $("instantSearch").value.trim().toLowerCase();
+    const filtered = allItems.filter(it => {
+      if (currentSource === "X" && it.source !== "X") return false;
+      if (currentSource === "NEWSPAPER" && it.source !== "NEWSPAPER") return false;
+      if (currentSource === "NEWS" && it.source !== "NEWS") return false;
+      if (currentSource === "YOUTUBE" && it.source !== "YOUTUBE") return false;
+      if (currentSource === "SOCIAL" && it.source !== "FACEBOOK" && it.source !== "INSTAGRAM") return false;
+      if (currentSource === "HINDI" && it.language !== "Hindi") return false;
+      if (currentSource === "ENGLISH" && it.language !== "English") return false;
+      if (sentFilter && it.sentiment !== sentFilter) return false;
+      if (selectedDistrict && it.district !== selectedDistrict) return false;
+      if (selectedDept && it.department !== selectedDept) return false;
+      if (selectedAccount && it.author !== selectedAccount) return false;
+      if (selectedHandle && it.handle !== selectedHandle) return false;
+      const hay = (it.text + " " + it.author + " " + (it.handle || "")).toLowerCase();
+      if (activeKeywordFilter && !hay.includes(activeKeywordFilter.toLowerCase())) return false;
+      if (q && !hay.includes(q)) return false;
+      return true;
+    });
+    $("postCount").textContent = filtered.length + " posts";
+
+    const sig = filtered.map(i => i.id).join(",") + "|" + (activeKeywordFilter || "") + "|" + keywords.join(",") + "|" + selectedDate;
+    if (sig === feedSig && newIdSet.size === 0) return;   // kuch badla nahi: DOM ko mat chhedo
+    feedSig = sig;
+
+    if (!filtered.length) { container.innerHTML = '<div class="col-span-full text-center py-12 text-slate-400 text-sm">इस date / filter पर कोई पोस्ट नहीं मिली।</div>'; return; }
+    const y = window.scrollY;
+    container.innerHTML = filtered.map(it => {
+      const isNew = newIdSet.has(it.id);
+      const sent = it.sentiment === "negative" ? '<span class="px-2 py-0.5 rounded bg-red-600 text-white font-bold">NEGATIVE</span>'
+        : it.sentiment === "positive" ? '<span class="px-2 py-0.5 rounded bg-emerald-600/80 text-white font-bold">POSITIVE</span>' : "";
+      const nb = isNew ? '<span class="px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-extrabold animate-pulse">NEW</span>' : "";
+      const border = it.sentiment === "negative" ? "border-red-500/60" : it.sentiment === "positive" ? "border-emerald-500/50" : "border-slate-800";
+      const eng = (it.source === "X" || it.source === "FACEBOOK" || it.source === "INSTAGRAM") ? `❤ ${it.likes} &nbsp; 🔁 ${it.retweets}` : esc(it.department);
+      const del = it.manual ? `<button data-act="delmanual" data-val="${esc(it.id)}" class="ml-2 text-slate-500 hover:text-red-400" title="हटाएँ">🗑</button>` : "";
+      return `<article class="rounded-xl p-4 bg-[#0f172a] border ${border} hover:border-sky-500/50 transition flex flex-col justify-between ${isNew ? "new-flash" : ""}">
+        <div>
+          <div class="flex items-center justify-between gap-2 text-[10px] mb-2">
+            <div class="flex items-center gap-1 flex-wrap">${srcBadge(it)} ${sent} ${nb}<span class="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300">${esc(it.district)}</span></div>
+            <span class="text-emerald-300 font-semibold whitespace-nowrap">${timeLabel(it)}</span>
+          </div>
+          <p class="text-xs font-semibold text-sky-300 mb-1 cursor-pointer hover:underline" data-act="account" data-val="${esc(it.author)}">${esc(it.author)}</p>
+          <p class="text-[13px] text-slate-100 leading-relaxed mb-3 break-words">${highlightText(it.text)}</p>
+        </div>
+        <div class="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-800/80">
+          <span>${eng} · ${esc(it.date_label)} ${esc(it.time_str)}${del}</span>
+          ${it.url ? `<a href="${esc(safeUrl(it.url))}" target="_blank" rel="noopener noreferrer" class="text-sky-400 hover:underline font-semibold">Open ↗</a>` : ""}
+        </div>
+      </article>`;
+    }).join("");
+    window.scrollTo(0, y);
+  }
+
+  // ---------- modals ----------
+  function closeModal(id) { $(id).classList.add("hidden"); }
+  function openManualModal() { $("mErr").classList.add("hidden"); $("manualModal").classList.remove("hidden"); }
+  async function submitManual() {
+    const err = $("mErr");
+    const when = $("mWhen").value ? $("mWhen").value.replace("T", " ") : "";
+    const body = {
+      platform: $("mPlatform").value, author: $("mAuthor").value.trim(), text: $("mText").value.trim(),
+      url: $("mUrl").value.trim(), posted_at: when, likes: parseInt($("mLikes").value || "0", 10) || 0
+    };
+    if (!body.author || !body.text) { err.textContent = "नाम और text दोनों ज़रूरी हैं।"; err.classList.remove("hidden"); return; }
+    try {
+      await api("/api/manual", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      ["mAuthor", "mText", "mUrl", "mWhen", "mLikes"].forEach(i => $(i).value = "");
+      closeModal("manualModal");
+      fetchFeed(true);
+    } catch (e) { err.textContent = "Save नहीं हुआ: " + e.message; err.classList.remove("hidden"); }
+  }
+
+  function openBriefModal() {
+    if (!latestPayload) return;
+    const s = latestPayload.stats;
+    const topNeg = allItems.filter(i => i.sentiment === "negative").slice(0, 5);
+    const negHandles = (latestPayload.handles || []).filter(h => h.negative > 0).sort((a, b) => b.negative - a.negative).slice(0, 4);
+    let t = `📊 *CIU WATCH — DAILY MEDIA & X BRIEF (${latestPayload.active_date})*\n🕒 Updated: ${latestPayload.updated_at}\n🚨 Crisis Score: ${s.crisis_score}/100\n\n`;
+    t += `📈 *SENTIMENT (Total ${s.total} | X: ${s.x_count} | News: ${s.news_count} | FB/IG: ${s.fb_count + s.ig_count})*\n`;
+    t += `🔴 Negative: ${s.negative} (${s.negative_pct}%)\n🟢 Positive: ${s.positive} (${s.positive_pct}%)\n⚪ Neutral: ${s.neutral} (${s.neutral_pct}%)\n\n`;
+    if (negHandles.length) {
+      t += `👤 *TOP NEGATIVE HANDLES:*\n`;
+      negHandles.forEach((h, i) => { t += `${i + 1}. ${h.handle} — ${h.total} tweets (${h.negative} Neg / ${h.positive} Pos)\n`; });
+      t += `\n`;
+    }
+    t += `🚨 *TOP NEGATIVE ALERTS:*\n`;
+    topNeg.forEach((n, i) => { t += `${i + 1}. [${n.source} | ${n.author}] ${n.text.slice(0, 140)}\n`; });
+    $("briefText").value = t;
+    $("briefModal").classList.remove("hidden");
+  }
+  function copyBrief() {
+    const ta = $("briefText");
+    ta.select();
+    navigator.clipboard.writeText(ta.value).then(() => alert("WhatsApp Brief copy हो गया!"));
+  }
+
+  // ---------- exports ----------
+  function exportCSV() {
+    if (!allItems.length) return;
+    const rows = [["Date", "Time (IST)", "Source", "Author", "Language", "Sentiment", "District", "Department", "Text", "Link"]];
+    allItems.forEach(i => rows.push([i.date_ist, i.time_str, i.source, i.author, i.language, i.sentiment, i.district, i.department, i.text, i.url]));
+    downloadCSV(`CIU_Watch_Feed_${(latestPayload && latestPayload.active_date) || "report"}.csv`, rows);
+  }
+  function exportAccountsCSV() {
+    if (!latestPayload || !latestPayload.accounts) return;
+    const rows = [["Account", "Source", "Total", "Positive", "Positive %", "Negative", "Negative %", "Neutral", "Stance", "Likes", "Retweets"]];
+    latestPayload.accounts.forEach(a => rows.push([a.author, a.source, a.total, a.positive, a.pos_pct, a.negative, a.neg_pct, a.neutral, a.stance, a.likes, a.retweets]));
+    downloadCSV(`CIU_Watch_Accounts_${latestPayload.active_date}.csv`, rows);
+  }
+  function exportHandlesCSV() {
+    if (!latestPayload || !latestPayload.handles) return;
+    const rows = [["Handle", "Name", "Tweets", "Positive", "Positive %", "Negative", "Negative %", "Neutral", "Likes", "Retweets", "Top Topics", "Districts", "Hashtags", "Sabse teekha tweet", "Link"]];
+    latestPayload.handles.forEach(h => rows.push([
+      h.handle, h.name, h.total, h.positive, h.pos_pct, h.negative, h.neg_pct, h.neutral, h.likes, h.retweets,
+      (h.topics || []).map(t => `${t.name} (${t.count})`).join("; "),
+      (h.districts || []).map(t => `${t.name} (${t.count})`).join("; "),
+      (h.hashtags || []).map(t => `${t.name} (${t.count})`).join("; "),
+      h.worst ? h.worst.text : "", h.worst ? h.worst.url : ""
+    ]));
+    downloadCSV(`CIU_Watch_Handles_${latestPayload.active_date}.csv`, rows);
+  }
+
+  // ---------- main fetch ----------
+  function updateConn() {
+    const dot = $("liveDot"), txt = $("connText");
+    if (!lastOkTs) return;
+    const age = Math.floor((Date.now() - lastOkTs) / 1000);
+    const stale = !selectedDate && scanInterval !== 0 && age > 120;
+    dot.className = "h-3 w-3 rounded-full " + (selectedDate ? "bg-amber-400" : stale || failCount > 1 ? "bg-red-500" : "bg-emerald-400 animate-pulse");
+    txt.textContent = "आख़िरी सफल अपडेट: " + (age < 90 ? age + "s" : Math.floor(age / 60) + "m") + " पहले";
+    txt.className = stale ? "text-red-400 font-semibold" : "";
+  }
+
+  async function fetchFeed(force = false) {
+    if (inFlight) return;
+    inFlight = true;
+    countdown = scanInterval || 30;
+    try {
+      const dateParam = selectedDate ? "&date=" + encodeURIComponent(selectedDate) : "";
+      const data = await api(`/api/feed?keywords=${encodeURIComponent(keywords.join(","))}&force=${force}${dateParam}`);
+      latestPayload = data; lastOkTs = Date.now(); failCount = 0;
+      $("connBox").classList.add("hidden");
+      applyPayload(data);
+    } catch (e) {
+      if (e.message !== "401") {
+        failCount++;
+        const box = $("connBox");
+        box.textContent = "सर्वर से जवाब नहीं आ रहा (" + e.message + "). Render free साइट सो गई हो सकती है — 30-50 सेकंड रुककर Scan Now दबाइए।";
+        box.classList.remove("hidden");
+      }
+    } finally { inFlight = false; updateConn(); }
+  }
+
+  function applyPayload(data) {
+    const isArchive = data.mode === "archive", s = data.stats;
+    const dp = $("datePicker");
+    if (data.today_date) dp.max = data.today_date;
+    if (!dp.value && data.active_date) dp.value = data.active_date;
+
+    $("archiveBanner").classList.toggle("hidden", !isArchive);
+    $("liveResetBtn").classList.toggle("hidden", !isArchive);
+    $("intervalBox").classList.toggle("hidden", isArchive);
+    if (isArchive) $("archiveDateText").textContent = "Archive Date: " + data.active_date;
+    $("lastUpdated").textContent = isArchive ? `Archive: ${data.active_date} (Updated ${data.updated_at})` : "Updated: " + data.updated_at;
+
+    $("kpiNeg").textContent = s.negative; $("kpiNegPct").textContent = s.negative_pct + "%";
+    $("kpiPos").textContent = s.positive; $("kpiPosPct").textContent = s.positive_pct + "%";
+    $("kpiTotal").textContent = s.total;
+    $("kpiX").textContent = `${s.x_count} X · ${s.yt_count} YT · ${s.fb_count + s.ig_count} FB/IG`;
+    $("langSplit").textContent = `HI ${s.hindi_count} | EN ${s.english_count}`;
+
+    const xb = $("xBadge"), xe = $("xErrorBox");
+    if (data.x_status === "live") {
+      xb.textContent = `X: ${isArchive ? "ARCHIVE" : "LIVE"} (${s.x_count})`;
+      xb.className = "px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold";
+      xe.classList.add("hidden");
+    } else {
+      xb.textContent = `X: Cached (${s.x_count})`;
+      xb.className = "px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold";
+      xe.textContent = data.x_error || "Render Environment में X_AUTH_TOKEN और X_CT0 जाँचिए।";
+      xe.classList.remove("hidden");
+    }
+
+    const cb = $("crisisBadge"), cs = s.crisis_score;
+    const lvl = cs >= 60 ? ["HIGH", "bg-red-950/80 text-red-300 border-red-500"] : cs >= 30 ? ["MED", "bg-amber-950/80 text-amber-300 border-amber-500"] : ["SAFE", "bg-emerald-950/60 text-emerald-300 border-emerald-600/40"];
+    cb.textContent = `Crisis: ${cs}/100 (${lvl[0]})`;
+    cb.className = "px-2.5 py-1 rounded-full border font-bold " + lvl[1];
+
+    const newIds = new Set(); let hasAlert = false, newest = null;
+    (data.items || []).forEach(it => {
+      if (!seenIds.has(it.id)) {
+        seenIds.add(it.id);
+        if (!firstLoad && !isArchive) { newIds.add(it.id); if (!newest) newest = it; if (it.sentiment === "negative") hasAlert = true; }
+      }
+    });
+    allItems = data.items || [];
+    renderCharts(data); renderRadars(); renderFeed(newIds);
+
+    if (!firstLoad && !isArchive && newIds.size > 0) {
+      playBeep(hasAlert);
+      if ("Notification" in window && Notification.permission === "granted" && newest)
+        new Notification(`CIU Watch — ${newest.source} (${newest.author})`, { body: newest.text.slice(0, 120) });
+    }
+    firstLoad = false;
+  }
+
+  // ---------- start ----------
+  initIntervalUI();
+  renderKeywords();
+  fetchFeed(false);
+
+  setInterval(() => {
+    updateConn();
+    if (selectedDate || scanInterval === 0) return;
+    countdown--;
+    if (countdown <= 0) fetchFeed(false);
+    const t = $("timer"); if (t) t.textContent = Math.max(countdown, 0);
+  }, 1000);
+  setInterval(() => {
+    if (selectedDate) return;
+    document.querySelectorAll("[data-ago]").forEach(el => { el.textContent = timeAgo(+el.dataset.ago); });
+  }, 30000);
+</script>
 </body>
 </html>
