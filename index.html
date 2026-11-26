@@ -3,50 +3,103 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CIU WATCH — Real-Time Media &amp; X Command Center</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1222'/%3E%3Ccircle cx='32' cy='32' r='20' fill='none' stroke='%2338bdf8' stroke-width='4'/%3E%3Ccircle cx='32' cy='32' r='10' fill='none' stroke='%2338bdf8' stroke-width='3' opacity='.6'/%3E%3Cpath d='M32 32 L50 18' stroke='%2334d399' stroke-width='4' stroke-linecap='round'/%3E%3Ccircle cx='32' cy='32' r='4' fill='%2338bdf8'/%3E%3C/svg%3E" />
+  <title>CIU WATCH — Rajasthan BJP &amp; Media Intelligence Command Center</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1222'/%3E%3Ccircle cx='32' cy='32' r='20' fill='none' stroke='%2338bdf8' stroke-width='4'/%3E%3Ccircle cx='32' cy='32' r='10' fill='none' stroke='%23f97316' stroke-width='3' opacity='.8'/%3E%3Cpath d='M32 32 L50 18' stroke='%2334d399' stroke-width='4' stroke-linecap='round'/%3E%3Ccircle cx='32' cy='32' r='4' fill='%2338bdf8'/%3E%3C/svg%3E" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
-    body { background:#070b14; color:#e2e8f0; font-family:system-ui,-apple-system,sans-serif; }
-    .glass { background:#0f172a; border:1px solid #1e293b; }
-    input[type="date"]::-webkit-calendar-picker-indicator,
-    input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter:invert(1); cursor:pointer; }
-    @keyframes flashNew {
-      0% { box-shadow:0 0 0 2px #ef4444,0 0 24px rgba(239,68,68,.55); background:#261019; }
-      100% { box-shadow:0 0 0 1px #1e293b; background:#0f172a; }
+    html { overflow-y: scroll; }
+    body {
+      background:
+        radial-gradient(circle at 12% 0%, rgba(56,189,248,0.10), transparent 34%),
+        radial-gradient(circle at 88% 4%, rgba(249,115,22,0.09), transparent 32%),
+        #050914;
+      color: #e2e8f0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     }
-    .new-flash { animation:flashNew 4s ease-out; }
-    .field { background:#020617; border:1px solid #334155; border-radius:.5rem; padding:.4rem .6rem; font-size:.75rem; color:#fff; width:100%; }
+    .glass {
+      background: linear-gradient(180deg, rgba(15,23,42,0.92), rgba(11,17,32,0.94));
+      border: 1px solid rgba(51,65,85,0.65);
+      box-shadow: 0 8px 28px -12px rgba(0,0,0,0.65);
+    }
+    .glass-accent {
+      background: linear-gradient(180deg, rgba(15,23,42,0.95), rgba(12,20,38,0.96));
+      border: 1px solid rgba(56,189,248,0.35);
+      box-shadow: 0 10px 30px -12px rgba(14,165,233,0.22);
+    }
+    .chart-card { contain: layout style; }
+    .chart-wrap { position: relative; width: 100%; overflow: hidden; }
+    .thin-scroll { scrollbar-width: thin; scrollbar-color: #334155 transparent; }
+    .thin-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .thin-scroll::-webkit-scrollbar-track { background: rgba(15,23,42,0.35); border-radius: 99px; }
+    .thin-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 99px; }
+    .thin-scroll::-webkit-scrollbar-thumb:hover { background: #475569; }
+    /* Desktop split-pane independent scrolling so Graphs NEVER shake or require full page scroll */
+    @media (min-width: 1024px) {
+      .workspace-grid {
+        height: calc(100vh - var(--hdr-h, 118px));
+        overflow: hidden;
+      }
+      .pane-scroll {
+        height: 100%;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        padding-bottom: 2rem;
+      }
+    }
+    input[type="date"]::-webkit-calendar-picker-indicator,
+    input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+    @keyframes flashNew {
+      0% { box-shadow: 0 0 0 2px #ef4444, 0 0 24px rgba(239,68,68,.55); background: #261019; }
+      100% { box-shadow: 0 0 0 1px #1e293b; background: #0f172a; }
+    }
+    .new-flash { animation: flashNew 4s ease-out; }
+    .field { background: #020617; border: 1px solid #334155; border-radius: .5rem; padding: .42rem .65rem; font-size: .75rem; color: #fff; width: 100%; }
+    .field:focus { outline: none; border-color: #38bdf8; }
+    .chip-toggle { transition: all 0.15s ease; }
   </style>
 </head>
-<body class="min-h-screen pb-10">
+<body class="min-h-screen">
 
   <!-- LOGIN -->
-  <div id="loginBox" class="fixed inset-0 z-[60] hidden bg-[#070b14] flex items-center justify-center p-4">
-    <div class="glass rounded-2xl p-6 w-full max-w-sm space-y-3">
-      <h2 class="text-lg font-extrabold text-white">CIU <span class="text-sky-400">WATCH</span></h2>
-      <p class="text-xs text-slate-400">Access key डालिए</p>
+  <div id="loginBox" class="fixed inset-0 z-[60] hidden bg-[#050914]/95 backdrop-blur flex items-center justify-center p-4">
+    <div class="glass-accent rounded-2xl p-6 w-full max-w-sm space-y-3">
+      <div class="flex items-center gap-2">
+        <span class="h-3 w-3 rounded-full bg-orange-500"></span>
+        <h2 class="text-lg font-extrabold text-white">CIU <span class="text-sky-400">WATCH</span></h2>
+      </div>
+      <p class="text-xs text-slate-400">Command Center Access Key डालिए</p>
       <input id="loginInput" type="password" class="field" placeholder="Access key" />
       <p id="loginErr" class="text-xs text-red-400 hidden">गलत key</p>
-      <button onclick="submitLogin()" class="w-full py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-sm">Enter</button>
+      <button onclick="submitLogin()" class="w-full py-2 rounded-lg bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white font-bold text-sm shadow-lg">Enter Dashboard</button>
     </div>
   </div>
 
-  <header class="sticky top-0 z-30 bg-[#0b1222]/95 backdrop-blur border-b border-slate-800 px-4 py-2.5">
-    <div class="max-w-[1550px] mx-auto flex flex-wrap items-center justify-between gap-2">
+  <!-- TOAST -->
+  <div id="toast" class="fixed bottom-5 right-5 z-[70] hidden max-w-md px-4 py-2.5 rounded-xl bg-slate-900/95 border border-sky-500/60 text-xs text-slate-100 shadow-2xl backdrop-blur"></div>
+
+  <!-- HEADER -->
+  <header id="topHeader" class="sticky top-0 z-30 bg-[#070d1b]/95 backdrop-blur-md border-b border-slate-800/90 px-4 py-2.5">
+    <div class="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-2">
       <div class="flex items-center gap-2.5">
-        <span id="liveDot" class="h-3 w-3 rounded-full bg-slate-500"></span>
+        <span id="liveDot" class="h-3 w-3 rounded-full bg-slate-500 ring-4 ring-slate-500/20"></span>
         <div>
-          <h1 class="text-lg font-extrabold tracking-wider text-white leading-tight">
-            CIU <span class="text-sky-400">WATCH</span>
-            <span class="text-[10px] font-bold ml-1.5 px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30">LIVE RADAR</span>
+          <h1 class="text-lg font-extrabold tracking-wider text-white leading-tight flex items-center gap-1.5 flex-wrap">
+            <span>CIU <span class="text-sky-400">WATCH</span></span>
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-300 border border-orange-500/40">BJP RAJASTHAN RADAR</span>
           </h1>
           <p class="text-[11px] text-slate-400"><span id="lastUpdated">Connecting...</span> · <span id="connText"></span></p>
         </div>
       </div>
 
       <div class="flex flex-wrap items-center gap-1.5 text-xs">
+        <!-- Quick Hide/Unhide Workspace Controls -->
+        <div class="flex items-center gap-1 bg-slate-900/90 border border-slate-700/80 rounded-lg p-0.5">
+          <button id="toggleFiltersBtn" onclick="toggleSection('filtersBar')" title="Filters Bar छुपाएँ/दिखाएँ" class="px-2 py-1 rounded-md text-[11px] font-semibold bg-amber-500/20 text-amber-300 hover:bg-amber-500/30">Filters: ON</button>
+          <button id="toggleTabsBtn" onclick="toggleSection('tabsBar')" title="Navigation Tabs छुपाएँ/दिखाएँ" class="px-2 py-1 rounded-md text-[11px] font-semibold bg-sky-500/20 text-sky-300 hover:bg-sky-500/30">Tabs: ON</button>
+          <button id="toggleGraphPaneBtn" onclick="toggleSection('graphPane')" title="Right Graph Panel छुपाएँ/दिखाएँ" class="px-2 py-1 rounded-md text-[11px] font-semibold bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30">Graphs: ON</button>
+        </div>
+
         <div class="flex items-center gap-1 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1">
           <span class="text-[11px] text-amber-300 font-semibold">Date:</span>
           <input id="datePicker" type="date" onchange="onDateChange()" class="bg-transparent text-white text-xs focus:outline-none cursor-pointer" />
@@ -54,96 +107,135 @@
         </div>
 
         <div id="intervalBox" class="flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1">
-          <span class="text-[10px] text-slate-400">Refresh:</span>
+          <span class="text-[10px] text-slate-400">Auto:</span>
           <select id="intervalSelect" onchange="changeInterval()" class="bg-slate-900 text-sky-300 text-xs font-bold focus:outline-none cursor-pointer">
-            <option value="30">30 sec</option><option value="60">1 min</option>
-            <option value="120">2 min</option><option value="300">5 min</option><option value="0">Manual</option>
+            <option value="30">30s</option><option value="60">1m</option>
+            <option value="120">2m</option><option value="300">5m</option><option value="0">Manual</option>
           </select>
           <span id="timerPill" class="text-slate-200 text-[11px] pl-1.5 border-l border-slate-700"></span>
         </div>
 
         <button id="pauseBtn" onclick="togglePause()" class="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold">⏸ Pause</button>
-
         <span id="xBadge" class="px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">Connecting...</span>
         <span id="crisisBadge" class="px-2.5 py-1 rounded-full bg-emerald-950/60 text-emerald-300 border border-emerald-600/40 font-bold">Crisis: 0/100</span>
 
-        <button id="soundBtn" onclick="toggleSound()" class="px-2.5 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 font-semibold">Sound: ON</button>
-        <button id="notifBtn" onclick="enableNotifications()" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700">Popup</button>
-        <button onclick="openManualModal()" class="px-2.5 py-1.5 rounded-lg bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-400/50 font-semibold">+ FB/IG जोड़ें</button>
-        <button onclick="openBriefModal()" class="px-2.5 py-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-400/50 font-semibold">WhatsApp Brief</button>
-        <button onclick="exportCSV()" class="px-2.5 py-1.5 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-400/50 font-semibold">Excel</button>
-        <button onclick="manualScanNow()" class="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-semibold">Scan Now</button>
+        <button id="brainBtn" onclick="openBrainModal()" class="px-2.5 py-1.5 rounded-lg bg-violet-500/20 hover:bg-violet-500/30 text-violet-200 border border-violet-400/50 font-semibold">🧠 AI Brain (0)</button>
+        <button id="soundBtn" onclick="toggleSound()" class="px-2 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 font-semibold">🔊</button>
+        <button id="notifBtn" onclick="enableNotifications()" class="px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700" title="Desktop Alert Popup">🔔</button>
+        <button onclick="openManualModal()" class="px-2.5 py-1.5 rounded-lg bg-fuchsia-500/20 hover:bg-fuchsia-500/30 text-fuchsia-300 border border-fuchsia-400/50 font-semibold">+ FB/IG</button>
+        <button onclick="openBriefModal()" class="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/50 font-semibold">Brief</button>
+        <button onclick="exportCSV()" class="px-2.5 py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-400/50 font-semibold">Excel</button>
+        <button onclick="manualScanNow()" class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-sky-600 to-cyan-600 hover:from-sky-500 hover:to-cyan-500 text-white font-bold shadow">Scan Now</button>
       </div>
     </div>
 
-    <div class="max-w-[1550px] mx-auto mt-2.5 pt-2.5 border-t border-slate-800/80 flex flex-wrap items-center gap-2">
-      <span class="text-xs font-semibold text-amber-400 uppercase tracking-wider mr-1">Priority Keywords:</span>
+    <!-- COLLAPSIBLE PRIORITY FILTERS BAR (ALL + Single Keyword + Hide/Show) -->
+    <div id="filtersBar" class="max-w-[1600px] mx-auto mt-2 pt-2 border-t border-slate-800/80 flex flex-wrap items-center gap-2">
+      <span class="text-[11px] font-bold text-amber-400 uppercase tracking-wider">Filters:</span>
+      <button id="allKwBtn" onclick="toggleAllKeywordsFilter()" class="chip-toggle px-2.5 py-1 rounded-full text-xs font-bold border bg-slate-800 text-sky-300 border-sky-500/40 hover:border-sky-400">
+        All Filters (0)
+      </button>
       <div id="kwChips" class="flex flex-wrap gap-1.5"></div>
       <form onsubmit="addKeyword(event)" class="flex items-center gap-1 ml-auto">
-        <input id="kwInput" type="text" placeholder="Add keyword (e.g. RPSC, JDA)..." class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-sky-500 w-48" />
+        <input id="kwInput" type="text" placeholder="Add filter (e.g. RPSC, JDA)..." class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-sky-500 w-44" />
         <button class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs px-3 py-1 rounded-lg">+ Add</button>
       </form>
     </div>
   </header>
 
-  <main class="max-w-[1550px] mx-auto px-4 py-4">
-    <div id="archiveBanner" class="hidden mb-3 px-4 py-2.5 rounded-xl bg-amber-500/15 border border-amber-400/50 text-amber-200 text-xs flex flex-wrap items-center justify-between gap-2">
-      <span>📅 <b id="archiveDateText">Back-Date Mode</b> — इस दिन के tweets और news दिख रहे हैं (auto-refresh बंद है)।</span>
-      <button onclick="resetToLive()" class="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold">Return to Live Feed ↗</button>
-    </div>
+  <!-- MAIN WORKSPACE (Desktop: 2 Independent Scrollable Panes! Feed & Graphs scroll separately) -->
+  <main class="max-w-[1600px] mx-auto px-4 pt-3">
+    <div id="workspaceGrid" class="workspace-grid grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
 
-    <!-- PAUSED CATCH-UP BANNER (Per-user only, server keeps collecting in background) -->
-    <div id="pausedBanner" class="hidden mb-3 px-4 py-2.5 rounded-xl bg-amber-500/15 border border-amber-400/50 text-amber-200 text-xs flex flex-wrap items-center justify-between gap-2">
-      <span id="pausedBannerText">⏸ स्क्रीन Paused है (बाक़ी users का लाइव चल रहा है)। Resume करते ही पीछे छूटे सभी tweets/news और graph अपडेट हो जाएँगे।</span>
-      <button onclick="resumeNow()" class="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold">▶ Resume &amp; Load Missed</button>
-    </div>
+      <!-- LEFT FEED PANE (Independent Scroll) -->
+      <section id="feedPane" class="lg:col-span-8 pane-scroll thin-scroll space-y-3 pr-0.5">
+        <div id="archiveBanner" class="hidden px-4 py-2.5 rounded-xl bg-amber-500/15 border border-amber-400/50 text-amber-200 text-xs flex flex-wrap items-center justify-between gap-2">
+          <span>📅 <b id="archiveDateText">Back-Date Mode</b> — इस दिन के tweets और news दिख रहे हैं (auto-refresh बंद है)।</span>
+          <button onclick="resetToLive()" class="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold">Return to Live Feed ↗</button>
+        </div>
 
-    <div id="connBox" class="hidden mb-3 p-3 rounded-xl bg-red-500/10 border border-red-500/40 text-red-200 text-xs"></div>
-    <div id="xErrorBox" class="hidden mb-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/40 text-amber-200 text-xs"></div>
+        <div id="pausedBanner" class="hidden px-4 py-2.5 rounded-xl bg-amber-500/15 border border-amber-400/50 text-amber-200 text-xs flex flex-wrap items-center justify-between gap-2">
+          <span id="pausedBannerText">⏸ स्क्रीन Paused है (बाक़ी users का लाइव चल रहा है)। Resume दबाते ही पीछे छूटे updates आ जाएँगे।</span>
+          <button onclick="resumeNow()" class="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold">▶ Resume &amp; Load Missed</button>
+        </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-      <div class="lg:col-span-8 space-y-3">
-        <div class="glass rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2">
-          <div class="flex flex-wrap gap-1.5 text-xs" id="srcBar">
-            <button data-src="SEARCH" data-off="bg-slate-800 text-slate-200 border border-slate-700" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-sky-600 text-white">🔍 Main (Filter)</button>
-            <button data-src="ALL" data-off="bg-emerald-950/70 border border-emerald-600/40 text-emerald-200" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-emerald-950/70 border border-emerald-600/40 text-emerald-200">All Admin &amp; Live</button>
+        <div id="connBox" class="hidden p-3 rounded-xl bg-red-500/10 border border-red-500/40 text-red-200 text-xs"></div>
+        <div id="xErrorBox" class="hidden p-3 rounded-xl bg-amber-500/10 border border-amber-500/40 text-amber-200 text-xs"></div>
+
+        <!-- COLLAPSIBLE NAVIGATION & SENTIMENT CONTROL CARD -->
+        <div class="glass rounded-xl p-2.5 space-y-2">
+          <div id="tabsBar" class="flex flex-wrap gap-1.5 text-xs">
+            <button data-src="SEARCH" data-off="bg-slate-800/90 text-slate-200 border border-slate-700" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-sky-600 text-white">🔍 Main (Filter)</button>
+            <button data-src="ALL" data-off="bg-emerald-950/70 border border-emerald-600/40 text-emerald-200" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-emerald-950/70 border border-emerald-600/40 text-emerald-200">All Live</button>
+            <button data-src="LEADERS" data-off="bg-indigo-500/20 border border-indigo-400/50 text-indigo-200" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-indigo-500/20 border border-indigo-400/50 text-indigo-200">👑 CMO &amp; Leaders X</button>
             <button data-src="X" data-off="bg-slate-800 text-slate-300" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-slate-800 text-slate-300">X (Twitter)</button>
-            <button data-src="HANDLES" data-off="bg-sky-500/20 border border-sky-400/50 text-sky-200" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-sky-500/20 border border-sky-400/50 text-sky-200">Handle Analysis</button>
-            <button data-src="ACCOUNTS" data-off="bg-amber-500/20 border border-amber-400/50 text-amber-200" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-amber-500/20 border border-amber-400/50 text-amber-200">Accounts Tracker</button>
+            <button data-src="HANDLES" data-off="bg-sky-500/20 border border-sky-400/50 text-sky-200" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-sky-500/20 border border-sky-400/50 text-sky-200">Handles</button>
+            <button data-src="ACCOUNTS" data-off="bg-amber-500/20 border border-amber-400/50 text-amber-200" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-amber-500/20 border border-amber-400/50 text-amber-200">Accounts</button>
             <button data-src="SOCIAL" data-off="bg-fuchsia-500/20 border border-fuchsia-400/50 text-fuchsia-200" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-fuchsia-500/20 border border-fuchsia-400/50 text-fuchsia-200">FB / IG</button>
-            <button data-src="NEWSPAPER" data-off="bg-slate-800 text-slate-300" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-slate-800 text-slate-300">Newspapers</button>
+            <button data-src="NEWSPAPER" data-off="bg-slate-800 text-slate-300" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-slate-800 text-slate-300">Papers</button>
             <button data-src="NEWS" data-off="bg-slate-800 text-slate-300" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-slate-800 text-slate-300">Web News</button>
             <button data-src="HINDI" data-off="bg-slate-800 text-slate-300" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-slate-800 text-slate-300">Hindi</button>
             <button data-src="ENGLISH" data-off="bg-slate-800 text-slate-300" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-slate-800 text-slate-300">English</button>
             <button data-src="YOUTUBE" data-off="bg-slate-800 text-slate-300" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-slate-800 text-slate-300">YouTube</button>
             <button data-src="LIVE_TV" data-off="bg-rose-950/70 border border-rose-600/50 text-rose-300" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-rose-950/70 border border-rose-600/50 text-rose-300">● LIVE TV</button>
-            <button id="negOnlyBtn" onclick="toggleSentFilter('negative')" class="px-2.5 py-1.5 rounded-lg bg-red-950/60 border border-red-700/50 text-red-300">Only Negative</button>
-            <button id="posOnlyBtn" onclick="toggleSentFilter('positive')" class="px-2.5 py-1.5 rounded-lg bg-emerald-950/60 border border-emerald-700/50 text-emerald-300">Only Positive</button>
           </div>
-          <div class="flex items-center gap-1.5 w-full sm:w-auto">
-            <div class="relative flex-1 sm:w-56">
-              <input id="instantSearch" oninput="onSearchInput()" type="text" placeholder="Search topic / Bhajan Lal / @handle..." class="bg-slate-900 border border-sky-500/50 rounded-lg pl-2.5 pr-7 py-1.5 text-xs text-white w-full focus:outline-none focus:border-sky-400" />
-              <button id="clearSearchBtn" onclick="clearSearchBox()" title="Filter हटाएँ" class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-amber-300 text-xs font-bold">✕</button>
+
+          <!-- DEDICATED SENTIMENT TABS (ALL / POSITIVE / NEGATIVE / NEUTRAL) + INSTANT SEARCH -->
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/80">
+            <div class="flex flex-wrap items-center gap-1.5 text-xs">
+              <span class="text-[10px] uppercase tracking-wider text-slate-400 font-bold mr-0.5">Sentiment:</span>
+              <button id="sentAllBtn" onclick="setSentFilter(null)" class="px-2.5 py-1 rounded-lg font-semibold bg-sky-600 text-white">All</button>
+              <button id="sentPosBtn" onclick="setSentFilter('positive')" class="px-2.5 py-1 rounded-lg font-semibold bg-emerald-950/70 border border-emerald-700/50 text-emerald-300">Positive (<span id="tabPosCnt">0</span>)</button>
+              <button id="sentNegBtn" onclick="setSentFilter('negative')" class="px-2.5 py-1 rounded-lg font-semibold bg-red-950/70 border border-red-700/50 text-red-300">Negative (<span id="tabNegCnt">0</span>)</button>
+              <button id="sentNeuBtn" onclick="setSentFilter('neutral')" class="px-2.5 py-1 rounded-lg font-semibold bg-slate-800 border border-slate-600/60 text-slate-200">Neutral (<span id="tabNeuCnt">0</span>)</button>
             </div>
-            <span id="postCount" class="text-xs text-slate-400 whitespace-nowrap">Blank</span>
+            <div class="flex items-center gap-1.5 w-full sm:w-auto">
+              <div class="relative flex-1 sm:w-64">
+                <input id="instantSearch" oninput="onSearchInput()" type="text" placeholder="Search Bhajan Lal / Gehlot / @handle..." class="bg-slate-950/90 border border-sky-500/50 rounded-lg pl-2.5 pr-7 py-1.5 text-xs text-white w-full focus:outline-none focus:border-sky-400" />
+                <button id="clearSearchBtn" onclick="clearAllFilters()" title="Filter हटाएँ" class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-amber-300 text-xs font-bold">✕</button>
+              </div>
+              <span id="postCount" class="text-xs text-slate-400 whitespace-nowrap font-semibold">Blank</span>
+            </div>
           </div>
         </div>
 
-        <div id="subFilterBar" class="hidden flex items-center justify-between bg-sky-950/40 border border-sky-500/30 rounded-lg px-3 py-1.5 text-xs text-sky-200">
+        <div id="subFilterBar" class="hidden flex items-center justify-between bg-sky-950/45 border border-sky-500/35 rounded-lg px-3 py-1.5 text-xs text-sky-200">
           <span id="subFilterText"></span>
           <button onclick="clearAllFilters()" class="text-amber-300 font-bold hover:underline">Clear All ✕</button>
         </div>
 
-        <!-- DYNAMIC MATCHING HANDLES BREAKDOWN (Shows automatically when filtering on Main/Search screen) -->
-        <div id="searchHandlesBox" class="hidden glass rounded-xl p-3 space-y-2 border-sky-500/40">
+        <!-- MATCHING HANDLES BREAKDOWN (Collapsible) -->
+        <div id="searchHandlesBox" class="hidden glass-accent rounded-xl p-3 space-y-2">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h3 id="searchHandlesTitle" class="text-xs font-bold text-sky-300 uppercase tracking-wide">Matching Handles Breakdown</h3>
               <p class="text-[10px] text-slate-400">किसी handle पर click करें ताकि सिर्फ़ उसी के matching posts दिखें</p>
             </div>
-            <button onclick="exportFilteredCSV()" class="px-2.5 py-1 rounded-lg bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 font-semibold text-[11px]">Export Filtered Excel</button>
+            <div class="flex items-center gap-1.5">
+              <button onclick="plotSearchInCustomGraph()" class="px-2.5 py-1 rounded-lg bg-sky-600/25 border border-sky-400/50 text-sky-200 font-semibold text-[11px]">📈 Graph बनाएं</button>
+              <button onclick="exportFilteredCSV()" class="px-2.5 py-1 rounded-lg bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 font-semibold text-[11px]">Export Excel</button>
+              <button onclick="toggleWidget('searchHandlesList')" class="px-2 py-1 rounded-lg bg-slate-800 text-slate-300 text-[10px] font-bold" id="wBtn_searchHandlesList">Hide</button>
+            </div>
           </div>
           <div id="searchHandlesList" class="flex flex-wrap gap-1.5"></div>
+        </div>
+
+        <!-- CMO & PROMINENT LEADERS TRACKER VIEW -->
+        <div id="leadersView" class="hidden space-y-3">
+          <div class="glass-accent rounded-xl p-3.5 space-y-3 chart-card">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 id="leaderChartTitle" class="text-sm font-extrabold text-white">👑 Rajasthan Prominent Leaders &amp; CMO — Twitter (X) Sentiment</h2>
+                <p id="leaderChartSub" class="text-[11px] text-slate-400">नीचे किसी भी नेता पर क्लिक करके उसका hourly Twitter graph देखें (BJP/Govt perspective)</p>
+              </div>
+              <div class="flex items-center gap-1.5 text-xs">
+                <button id="leaderBackCompareBtn" onclick="selectLeaderChart(null)" class="hidden px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-600 text-slate-200 font-semibold">← All Leaders</button>
+                <button id="leaderViewTweetsBtn" onclick="openSelectedLeaderTweets()" class="hidden px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-semibold">View X Tweets →</button>
+              </div>
+            </div>
+            <div class="chart-wrap h-60"><canvas id="leaderChart"></canvas></div>
+          </div>
+          <div id="leadersGrid" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
         </div>
 
         <!-- HANDLE ANALYSIS -->
@@ -158,23 +250,18 @@
                 <option value="positive">सबसे ज़्यादा Positive</option>
                 <option value="engagement">सबसे ज़्यादा Likes+RT</option>
               </select>
-              <button onclick="exportHandlesCSV()" class="px-2.5 py-1 rounded-lg bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 font-semibold">Export Handles Excel</button>
+              <button onclick="exportHandlesCSV()" class="px-2.5 py-1 rounded-lg bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 font-semibold">Export Excel</button>
             </div>
           </div>
           <div class="glass rounded-xl overflow-x-auto">
             <table class="w-full text-left text-xs border-collapse">
               <thead>
                 <tr class="bg-slate-900/90 text-slate-400 uppercase text-[10px] border-b border-slate-800">
-                  <th class="py-2.5 px-3">Handle</th>
-                  <th class="py-2.5 px-2 text-center">Tweets</th>
-                  <th class="py-2.5 px-2 text-center text-emerald-400">Pos</th>
-                  <th class="py-2.5 px-2 text-center text-red-400">Neg</th>
-                  <th class="py-2.5 px-2 text-center">Neu</th>
-                  <th class="py-2.5 px-3 w-32">Ratio</th>
-                  <th class="py-2.5 px-3">किस बारे में (विषय / ज़िला)</th>
-                  <th class="py-2.5 px-3">Hashtags</th>
-                  <th class="py-2.5 px-2 text-center">❤ / 🔁</th>
-                  <th class="py-2.5 px-3 text-right">Action</th>
+                  <th class="py-2.5 px-3">Handle</th><th class="py-2.5 px-2 text-center">Tweets</th>
+                  <th class="py-2.5 px-2 text-center text-emerald-400">Pos</th><th class="py-2.5 px-2 text-center text-red-400">Neg</th>
+                  <th class="py-2.5 px-2 text-center">Neu</th><th class="py-2.5 px-3 w-28">Ratio</th>
+                  <th class="py-2.5 px-3">विषय / ज़िला</th><th class="py-2.5 px-3">Hashtags</th>
+                  <th class="py-2.5 px-2 text-center">❤ / 🔁</th><th class="py-2.5 px-3 text-right">Action</th>
                 </tr>
               </thead>
               <tbody id="handlesBody" class="divide-y divide-slate-800/80"></tbody>
@@ -196,7 +283,7 @@
               <select id="accSort" onchange="renderAccounts()" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white focus:outline-none">
                 <option value="total">Total Posts</option><option value="negative">Most Negative</option><option value="positive">Most Positive</option>
               </select>
-              <button onclick="exportAccountsCSV()" class="px-2.5 py-1 rounded-lg bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 font-semibold">Export Accounts Excel</button>
+              <button onclick="exportAccountsCSV()" class="px-2.5 py-1 rounded-lg bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 font-semibold">Export Excel</button>
             </div>
           </div>
           <div class="glass rounded-xl overflow-x-auto">
@@ -206,7 +293,7 @@
                   <th class="py-2.5 px-3">Account</th><th class="py-2.5 px-2 text-center">Source</th>
                   <th class="py-2.5 px-2 text-center">Total</th><th class="py-2.5 px-2 text-center text-emerald-400">Pos</th>
                   <th class="py-2.5 px-2 text-center text-red-400">Neg</th><th class="py-2.5 px-2 text-center">Neu</th>
-                  <th class="py-2.5 px-3 w-40">Ratio</th><th class="py-2.5 px-3 text-right">Action</th>
+                  <th class="py-2.5 px-3 w-36">Ratio</th><th class="py-2.5 px-3 text-right">Action</th>
                 </tr>
               </thead>
               <tbody id="accountsTableBody" class="divide-y divide-slate-800/80"></tbody>
@@ -216,75 +303,167 @@
 
         <div id="liveTvWall" class="hidden grid grid-cols-1 md:grid-cols-2 gap-3"></div>
         <div id="feed" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
-      </div>
+      </section>
 
-      <aside class="lg:col-span-4 lg:sticky lg:top-28 space-y-3">
-        <div class="grid grid-cols-3 gap-2">
-          <div class="glass rounded-xl p-2.5 border-red-500/30 text-center">
-            <div class="text-[10px] text-red-400 font-bold uppercase">Negative</div>
-            <div class="text-lg font-extrabold text-red-400" id="kpiNeg">0</div>
-            <div class="text-[10px] text-slate-400" id="kpiNegPct">0%</div>
+      <!-- RIGHT ANALYTICS & GRAPHS PANE (Independent Scroll + Hide/Unhide on Every Widget!) -->
+      <aside id="graphPane" class="lg:col-span-4 pane-scroll thin-scroll space-y-3 pl-0.5 pr-1">
+        <!-- KPI Strip -->
+        <div class="grid grid-cols-4 gap-1.5">
+          <div class="glass rounded-xl p-2 border-red-500/35 text-center cursor-pointer hover:border-red-400" onclick="setSentFilter('negative')">
+            <div class="text-[9px] text-red-400 font-bold uppercase">Neg</div>
+            <div class="text-base font-extrabold text-red-400" id="kpiNeg">0</div>
+            <div class="text-[9px] text-slate-400" id="kpiNegPct">0%</div>
           </div>
-          <div class="glass rounded-xl p-2.5 border-emerald-500/30 text-center">
-            <div class="text-[10px] text-emerald-400 font-bold uppercase">Positive</div>
-            <div class="text-lg font-extrabold text-emerald-400" id="kpiPos">0</div>
-            <div class="text-[10px] text-slate-400" id="kpiPosPct">0%</div>
+          <div class="glass rounded-xl p-2 border-emerald-500/35 text-center cursor-pointer hover:border-emerald-400" onclick="setSentFilter('positive')">
+            <div class="text-[9px] text-emerald-400 font-bold uppercase">Pos (BJP)</div>
+            <div class="text-base font-extrabold text-emerald-400" id="kpiPos">0</div>
+            <div class="text-[9px] text-slate-400" id="kpiPosPct">0%</div>
           </div>
-          <div class="glass rounded-xl p-2.5 text-center">
-            <div class="text-[10px] text-slate-400 font-bold uppercase">Total</div>
-            <div class="text-lg font-extrabold text-white" id="kpiTotal">0</div>
-            <div class="text-[10px] text-sky-400 font-semibold" id="kpiX">0 X</div>
+          <div class="glass rounded-xl p-2 border-slate-600/50 text-center cursor-pointer hover:border-slate-400" onclick="setSentFilter('neutral')">
+            <div class="text-[9px] text-slate-300 font-bold uppercase">Neu</div>
+            <div class="text-base font-extrabold text-slate-100" id="kpiNeu">0</div>
+            <div class="text-[9px] text-slate-400" id="kpiNeuPct">0%</div>
+          </div>
+          <div class="glass rounded-xl p-2 text-center cursor-pointer hover:border-sky-400" onclick="setSentFilter(null)">
+            <div class="text-[9px] text-sky-300 font-bold uppercase">Total</div>
+            <div class="text-base font-extrabold text-white" id="kpiTotal">0</div>
+            <div class="text-[9px] text-sky-400 font-semibold" id="kpiX">0 X</div>
           </div>
         </div>
 
-        <div class="glass rounded-xl p-3">
-          <div class="flex items-center justify-between gap-2 mb-1.5">
+        <!-- WIDGET 1: ADVANCED HOURLY SENTIMENT + CUSTOM FILTER GRAPH -->
+        <div class="glass-accent rounded-xl p-3 space-y-2 chart-card">
+          <div class="flex items-center justify-between gap-1.5">
+            <div class="min-w-0">
+              <h2 id="chartTitle" class="text-xs font-extrabold text-white uppercase tracking-wide truncate">Full-Day Sentiment (IST)</h2>
+              <p class="text-[10px] text-sky-400" id="graphXCount">X tweets in graph: 0</p>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <div class="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-700 text-[10px]">
+                <button onclick="setChartType('line')" id="cTypeLine" class="px-1.5 py-0.5 rounded bg-sky-600 text-white font-bold">Line</button>
+                <button onclick="setChartType('bar')" id="cTypeBar" class="px-1.5 py-0.5 rounded text-slate-300 font-bold">Bar</button>
+              </div>
+              <div class="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-700 text-[10px]">
+                <button onclick="setGraphScope('ALL')" id="gScopeALL" class="px-1.5 py-0.5 rounded bg-sky-600 text-white font-bold">All</button>
+                <button onclick="setGraphScope('X')" id="gScopeX" class="px-1.5 py-0.5 rounded text-slate-300 font-bold">X</button>
+              </div>
+              <button onclick="toggleWidget('wBodyHourly')" id="wBtn_wBodyHourly" class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 hover:text-white text-[10px] font-bold">Hide</button>
+            </div>
+          </div>
+
+          <div id="wBodyHourly" class="space-y-2">
+            <!-- Custom Filter Graph Controls -->
+            <div class="bg-slate-950/85 border border-slate-800 rounded-lg p-2 space-y-1.5">
+              <div class="flex items-center gap-1">
+                <input id="cgQuery" type="text" placeholder="Custom filter graph (e.g. RPSC, Gehlot)..." class="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-[11px] text-white flex-1 focus:outline-none focus:border-sky-500" onkeydown="if(event.key==='Enter') runCustomGraph()" />
+                <select id="cgSource" class="bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-[10px] text-sky-300 font-semibold focus:outline-none">
+                  <option value="ALL">All</option><option value="X">Only X</option><option value="MEDIA">Media</option>
+                </select>
+                <button onclick="runCustomGraph()" class="px-2 py-1 rounded bg-sky-600 hover:bg-sky-500 text-white text-[10px] font-bold">Plot</button>
+                <button id="cgResetBtn" onclick="resetCustomGraph()" class="hidden px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-amber-300 text-[10px] font-bold">✕</button>
+              </div>
+              <div id="cgMeta" class="hidden text-[10px] text-amber-300 font-semibold"></div>
+            </div>
+            <div class="chart-wrap h-44"><canvas id="hourlyChart"></canvas></div>
+          </div>
+        </div>
+
+        <!-- WIDGET 2: ALWAYS-ON INTERNET LEADER BUZZ GRAPH (DESPITE ANY FILTER!) -->
+        <div class="glass rounded-xl p-3 space-y-2 chart-card border-orange-500/35">
+          <div class="flex items-center justify-between gap-2">
             <div>
-              <h2 id="chartTitle" class="text-xs font-bold text-white uppercase tracking-wide">Full-Day Sentiment (IST)</h2>
-              <p class="text-[10px] text-sky-400" id="graphXCount">X tweets counted in graph: 0</p>
+              <h2 class="text-xs font-extrabold text-orange-300 uppercase tracking-wide">🔥 Internet Leader Buzz (All Sources)</h2>
+              <p class="text-[10px] text-slate-400">Filter के बावजूद किन नेताओं की सबसे ज़्यादा चर्चा चल रही है</p>
             </div>
-            <div class="flex items-center gap-1 bg-slate-900 p-0.5 rounded-lg border border-slate-700 text-[10px]">
-              <button onclick="setGraphScope('ALL')" id="gScopeALL" class="px-2 py-0.5 rounded bg-sky-600 text-white font-bold">All</button>
-              <button onclick="setGraphScope('X')" id="gScopeX" class="px-2 py-0.5 rounded text-slate-300 font-bold">Only X</button>
+            <div class="flex items-center gap-1 shrink-0">
+              <button onclick="setSource('LEADERS')" class="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-400/40 text-[10px] font-bold">Full →</button>
+              <button onclick="toggleWidget('wBodyLeaderBuzz')" id="wBtn_wBodyLeaderBuzz" class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 hover:text-white text-[10px] font-bold">Hide</button>
             </div>
           </div>
-          <div class="h-48"><canvas id="hourlyChart"></canvas></div>
+          <div id="wBodyLeaderBuzz" class="space-y-2">
+            <div class="chart-wrap h-44"><canvas id="leaderBuzzChart"></canvas></div>
+            <div id="leaderMiniStrip" class="flex flex-wrap gap-1.5"></div>
+          </div>
         </div>
 
-        <div class="glass rounded-xl p-3">
+        <!-- WIDGET 3: SENTIMENT RATIO DONUT -->
+        <div class="glass rounded-xl p-3 chart-card">
           <div class="flex items-center justify-between mb-1">
-            <h2 class="text-xs font-bold text-white uppercase tracking-wide" id="donutTitle">Sentiment Ratio (All)</h2>
-            <span class="text-[10px] text-slate-400" id="langSplit">HI 0 | EN 0</span>
+            <h2 class="text-xs font-bold text-white uppercase tracking-wide" id="donutTitle">Sentiment Ratio</h2>
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] text-slate-400" id="langSplit">HI 0 | EN 0</span>
+              <button onclick="toggleWidget('wBodyDonut')" id="wBtn_wBodyDonut" class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 hover:text-white text-[10px] font-bold">Hide</button>
+            </div>
           </div>
-          <div class="h-36 flex items-center justify-center"><canvas id="donutChart"></canvas></div>
+          <div id="wBodyDonut" class="chart-wrap h-36"><canvas id="donutChart"></canvas></div>
         </div>
 
+        <!-- WIDGET 4: DISTRICT HEAT RADAR -->
         <div class="glass rounded-xl p-3">
           <div class="flex items-center justify-between mb-2">
             <h3 class="text-xs font-bold uppercase tracking-wide text-amber-400">District Heat Radar</h3>
-            <span class="text-[10px] text-slate-400">Click to filter</span>
+            <button onclick="toggleWidget('districtStrip')" id="wBtn_districtStrip" class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 hover:text-white text-[10px] font-bold">Hide</button>
           </div>
           <div id="districtStrip" class="flex flex-wrap gap-1.5"></div>
         </div>
 
+        <!-- WIDGET 5: DEPARTMENT RADAR -->
         <div class="glass rounded-xl p-3">
           <div class="flex items-center justify-between mb-2">
             <h3 class="text-xs font-bold uppercase tracking-wide text-sky-400">Department Radar</h3>
-            <span class="text-[10px] text-slate-400">Click to filter</span>
+            <button onclick="toggleWidget('deptStrip')" id="wBtn_deptStrip" class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 hover:text-white text-[10px] font-bold">Hide</button>
           </div>
           <div id="deptStrip" class="flex flex-wrap gap-1.5"></div>
         </div>
 
+        <!-- WIDGET 6: SOURCE HEALTH -->
         <div class="glass rounded-xl p-3">
-          <h3 class="text-xs font-bold uppercase tracking-wide text-slate-300 mb-2">Source Health</h3>
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-bold uppercase tracking-wide text-slate-300">Source Health</h3>
+            <button onclick="toggleWidget('sourcesBox')" id="wBtn_sourcesBox" class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 hover:text-white text-[10px] font-bold">Hide</button>
+          </div>
           <div id="sourcesBox" class="space-y-1 text-[11px]"></div>
         </div>
       </aside>
     </div>
   </main>
 
+  <!-- AI GUARDRAIL CONFLICT MODAL -->
+  <div id="conflictModal" class="fixed inset-0 z-[65] hidden bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="glass rounded-2xl max-w-md w-full p-5 space-y-3 border-amber-500/60">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-extrabold text-amber-400">⚠ AI Guardrail Verification</h3>
+        <button onclick="closeModal('conflictModal')" class="text-slate-400 hover:text-white text-sm font-bold">✕</button>
+      </div>
+      <p id="conflictMsg" class="text-xs text-slate-200 leading-relaxed"></p>
+      <div id="conflictSnippet" class="p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-[11px] text-slate-400"></div>
+      <div class="flex justify-end gap-2 pt-1">
+        <button onclick="closeModal('conflictModal')" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200">Cancel (ग़लती से क्लिक हुआ)</button>
+        <button onclick="confirmConflictFeedback()" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950">Confirm Override</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI BRAIN / SELF-LEARNING MODAL -->
+  <div id="brainModal" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="glass-accent rounded-2xl max-w-2xl w-full p-5 space-y-3 max-h-[85vh] overflow-y-auto thin-scroll">
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 class="text-base font-bold text-violet-300">🧠 CIU Watch — AI Self-Learning Memory</h3>
+          <p id="brainSub" class="text-[11px] text-slate-400">यूज़र्स के सुझाव से सीखे गए patterns (कोई ग़लत हो तो ✕ दबाकर हटाएँ)</p>
+        </div>
+        <button onclick="closeModal('brainModal')" class="text-slate-400 hover:text-white text-sm font-bold">✕ Close</button>
+      </div>
+      <div id="brainTokensBox" class="flex flex-wrap gap-1.5"></div>
+      <div class="pt-2 border-t border-slate-800">
+        <h4 class="text-xs font-bold text-slate-300 uppercase mb-2">Recent Suggestions &amp; Flagged Conflicts</h4>
+        <div id="brainLogBox" class="space-y-1.5 text-[11px]"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- BRIEF MODAL -->
-  <div id="briefModal" class="fixed inset-0 z-50 hidden bg-black/75 flex items-center justify-center p-4">
+  <div id="briefModal" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="glass rounded-2xl max-w-2xl w-full p-5 space-y-3">
       <div class="flex items-center justify-between">
         <h3 class="text-base font-bold text-amber-400">CIU Watch — WhatsApp Brief</h3>
@@ -296,13 +475,12 @@
   </div>
 
   <!-- MANUAL FB/IG MODAL -->
-  <div id="manualModal" class="fixed inset-0 z-50 hidden bg-black/75 flex items-center justify-center p-4">
+  <div id="manualModal" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="glass rounded-2xl max-w-lg w-full p-5 space-y-2.5">
       <div class="flex items-center justify-between">
         <h3 class="text-base font-bold text-fuchsia-300">Facebook / Instagram पोस्ट जोड़ें</h3>
         <button onclick="closeModal('manualModal')" class="text-slate-400 hover:text-white text-sm font-bold">✕ Close</button>
       </div>
-      <p class="text-[11px] text-slate-400">कोई public पोस्ट मिले तो यहाँ चिपकाइए। वह बाकी खबरों की तरह गिनी जाएगी।</p>
       <select id="mPlatform" class="field"><option value="FACEBOOK">Facebook</option><option value="INSTAGRAM">Instagram</option><option value="OTHER">Other</option></select>
       <input id="mAuthor" class="field" placeholder="किसने लिखा (पेज/अकाउंट का नाम)" maxlength="80" />
       <textarea id="mText" rows="4" class="field" placeholder="पोस्ट का text" maxlength="1000"></textarea>
@@ -326,28 +504,90 @@
   let countdown = scanInterval || 30;
   let isPaused = (scanInterval === 0);
 
-  // Main screen defaults to "SEARCH" (blank until user filters; normal admin news runs on "ALL" & other tabs)
-  let currentSource = "SEARCH", accSourceFilter = "ALL", graphScope = "ALL";
-  let activeKeywordFilter = null, sentFilter = null, selectedDistrict = null, selectedDept = null, selectedAccount = null, selectedHandle = null;
+  // Persisted Hide/Unhide UI Preferences
+  let uiHidden = JSON.parse(localStorage.getItem("ciuwatch_ui_hidden") || "{}") || {};
+
+  // Filter & Chart States
+  let currentSource = "SEARCH", accSourceFilter = "ALL", graphScope = "ALL", hourlyChartType = "line";
+  let activeKeywordFilter = null, allKeywordsActive = false, sentFilter = null;
+  let selectedDistrict = null, selectedDept = null, selectedAccount = null, selectedHandle = null, selectedLeaderId = null;
+  let leaderChartFocusId = null, customGraphState = null, pendingFeedback = null;
+
   let selectedDate = "", soundOn = true, allItems = [], lastFilteredItems = [], latestPayload = null;
-  let seenIds = new Set(), firstLoad = true, hourlyChartObj = null, donutChartObj = null;
+  let seenIds = new Set(), firstLoad = true;
+  let hourlyChartObj = null, donutChartObj = null, leaderChartObj = null, leaderBuzzChartObj = null;
+  let lastHourlySig = "", lastDonutSig = "", lastLeaderChartSig = "", lastBuzzSig = "";
   let inFlight = false, activeCtrl = null, lastOkTs = 0, lastServerTime = 0, failCount = 0, feedSig = "", tvSig = "", audioCtx = null;
-  let missedX = 0, missedMedia = 0, pulseTick = 0;
+  let missedX = 0, missedMedia = 0, pulseTick = 0, toastTimer = null;
 
   const SOURCE_BADGES = {
-    X:         { short: "X",     full: "X LIVE",    cls: "bg-sky-500/20 text-sky-300 border-sky-500/30" },
-    YOUTUBE:   { short: "YT",    full: "YOUTUBE",   cls: "bg-red-500/20 text-red-300 border-red-500/30" },
-    NEWSPAPER: { short: "PAPER", full: "PAPER",     cls: "bg-purple-500/20 text-purple-300 border-purple-500/30" },
-    FACEBOOK:  { short: "FB",    full: "FACEBOOK",  cls: "bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30" },
-    INSTAGRAM: { short: "IG",    full: "INSTAGRAM", cls: "bg-pink-500/20 text-pink-300 border-pink-500/30" },
-    NEWS:      { short: "NEWS",  full: "NEWS",      cls: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" },
+    X:         { short: "X",     full: "X LIVE",    cls: "bg-sky-500/20 text-sky-300 border-sky-500/35" },
+    YOUTUBE:   { short: "YT",    full: "YOUTUBE",   cls: "bg-red-500/20 text-red-300 border-red-500/35" },
+    NEWSPAPER: { short: "PAPER", full: "PAPER",     cls: "bg-purple-500/20 text-purple-300 border-purple-500/35" },
+    FACEBOOK:  { short: "FB",    full: "FACEBOOK",  cls: "bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/35" },
+    INSTAGRAM: { short: "IG",    full: "INSTAGRAM", cls: "bg-pink-500/20 text-pink-300 border-pink-500/35" },
+    NEWS:      { short: "NEWS",  full: "NEWS",      cls: "bg-emerald-500/20 text-emerald-300 border-emerald-500/35" },
   };
+  const PARTY_BADGES = {
+    GOVT: "bg-sky-500/20 text-sky-300 border-sky-500/40",
+    BJP:  "bg-orange-500/20 text-orange-300 border-orange-500/40",
+    INC:  "bg-blue-500/20 text-blue-300 border-blue-500/40",
+    RLP:  "bg-amber-500/20 text-amber-300 border-amber-500/40",
+    BAP:  "bg-teal-500/20 text-teal-300 border-teal-500/40",
+  };
+
+  // ---------- Hide / Unhide Layout Engine ----------
+  function syncHeaderHeight() {
+    const h = $("topHeader") ? $("topHeader").offsetHeight : 118;
+    document.documentElement.style.setProperty("--hdr-h", (h + 14) + "px");
+  }
+  function saveUiPrefs() { localStorage.setItem("ciuwatch_ui_hidden", JSON.stringify(uiHidden)); }
+  function applyUiPrefs() {
+    // Major Sections
+    const fOff = !!uiHidden.filtersBar;
+    $("filtersBar").classList.toggle("hidden", fOff);
+    $("toggleFiltersBtn").textContent = fOff ? "Filters: OFF" : "Filters: ON";
+    $("toggleFiltersBtn").className = fOff ? "px-2 py-1 rounded-md text-[11px] font-semibold bg-slate-800 text-slate-400" : "px-2 py-1 rounded-md text-[11px] font-semibold bg-amber-500/20 text-amber-300 hover:bg-amber-500/30";
+
+    const tOff = !!uiHidden.tabsBar;
+    $("tabsBar").classList.toggle("hidden", tOff);
+    $("toggleTabsBtn").textContent = tOff ? "Tabs: OFF" : "Tabs: ON";
+    $("toggleTabsBtn").className = tOff ? "px-2 py-1 rounded-md text-[11px] font-semibold bg-slate-800 text-slate-400" : "px-2 py-1 rounded-md text-[11px] font-semibold bg-sky-500/20 text-sky-300 hover:bg-sky-500/30";
+
+    const gOff = !!uiHidden.graphPane;
+    $("graphPane").classList.toggle("hidden", gOff);
+    $("feedPane").classList.toggle("lg:col-span-8", !gOff);
+    $("feedPane").classList.toggle("lg:col-span-12", gOff);
+    $("toggleGraphPaneBtn").textContent = gOff ? "Graphs: OFF" : "Graphs: ON";
+    $("toggleGraphPaneBtn").className = gOff ? "px-2 py-1 rounded-md text-[11px] font-semibold bg-slate-800 text-slate-400" : "px-2 py-1 rounded-md text-[11px] font-semibold bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30";
+
+    // Individual Widgets
+    ["wBodyHourly", "wBodyLeaderBuzz", "wBodyDonut", "districtStrip", "deptStrip", "sourcesBox", "searchHandlesList"].forEach(id => {
+      const el = $(id), btn = $("wBtn_" + id);
+      if (!el || !btn) return;
+      const off = !!uiHidden[id];
+      el.classList.toggle("hidden", off);
+      btn.textContent = off ? "Show" : "Hide";
+    });
+    syncHeaderHeight();
+  }
+  function toggleSection(key) { uiHidden[key] = !uiHidden[key]; saveUiPrefs(); applyUiPrefs(); }
+  function toggleWidget(id) { uiHidden[id] = !uiHidden[id]; saveUiPrefs(); applyUiPrefs(); }
+  window.addEventListener("resize", syncHeaderHeight);
 
   // ---------- helpers ----------
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
   function safeUrl(u) { return /^https?:\/\//i.test(u || "") ? u : "#"; }
+  function showToast(msg, tone = "sky") {
+    const el = $("toast");
+    el.textContent = msg;
+    const border = tone === "amber" ? "border-amber-500/70 text-amber-200" : tone === "emerald" ? "border-emerald-500/70 text-emerald-200" : "border-sky-500/60 text-slate-100";
+    el.className = "fixed bottom-5 right-5 z-[70] max-w-md px-4 py-2.5 rounded-xl bg-slate-900/95 border text-xs shadow-2xl backdrop-blur " + border;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.add("hidden"), 4500);
+  }
   function csvCell(v) {
     let s = String(v == null ? "" : v);
     if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
@@ -372,21 +612,20 @@
     if (it.ts_approx) return "समय अज्ञात";
     return `<span data-ago="${it.ts}">${timeAgo(it.ts)}</span>`;
   }
-
-  // Space-insensitive smart matching: "bhajan lal" matches "Bhajanlal", "Bhajan Lal", "@BhajanlalBjp" etc.
   function matchesText(it, rawQ) {
     const q = (rawQ || "").trim().toLowerCase();
     if (!q) return true;
-    const hay = (
-      (it.text || "") + " " + (it.author || "") + " " + (it.handle || "") + " " +
-      (it.district || "") + " " + (it.department || "")
-    ).toLowerCase();
+    const hay = ((it.text || "") + " " + (it.author || "") + " " + (it.handle || "") + " " + (it.district || "") + " " + (it.department || "")).toLowerCase();
     if (hay.includes(q)) return true;
     const qCompact = q.replace(/\s+/g, "");
     if (qCompact.length >= 3 && hay.replace(/\s+/g, "").includes(qCompact)) return true;
     const words = q.split(/\s+/).filter(w => w.length >= 2);
-    if (words.length > 1 && words.every(w => hay.includes(w))) return true;
-    return false;
+    return words.length > 1 && words.every(w => hay.includes(w));
+  }
+  function matchesKeywordSelection(it) {
+    if (allKeywordsActive) return keywords.length === 0 || keywords.some(k => matchesText(it, k));
+    if (activeKeywordFilter) return matchesText(it, activeKeywordFilter);
+    return true;
   }
 
   // ---------- auth / api ----------
@@ -405,14 +644,8 @@
   function showLogin() { $("loginBox").classList.remove("hidden"); $("loginInput").focus(); }
   async function submitLogin() {
     localStorage.setItem("ciuwatch_key", $("loginInput").value.trim());
-    try {
-      await api("/api/check");
-      $("loginBox").classList.add("hidden");
-      $("loginErr").classList.add("hidden");
-      fetchFeed(true);
-    } catch (e) {
-      $("loginErr").classList.remove("hidden");
-    }
+    try { await api("/api/check"); $("loginBox").classList.add("hidden"); $("loginErr").classList.add("hidden"); fetchFeed(true); }
+    catch (e) { $("loginErr").classList.remove("hidden"); }
   }
   $("loginInput").addEventListener("keydown", e => { if (e.key === "Enter") submitLogin(); });
 
@@ -423,170 +656,96 @@
       audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
       if (audioCtx.state === "suspended") audioCtx.resume();
       const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
-      osc.type = isAlert ? "sawtooth" : "sine";
-      osc.frequency.value = isAlert ? 880 : 620;
-      gain.gain.value = 0.08;
-      osc.connect(gain); gain.connect(audioCtx.destination);
-      osc.start();
+      osc.type = isAlert ? "sawtooth" : "sine"; osc.frequency.value = isAlert ? 880 : 620; gain.gain.value = 0.08;
+      osc.connect(gain); gain.connect(audioCtx.destination); osc.start();
       setTimeout(() => osc.stop(), isAlert ? 320 : 160);
     } catch (e) {}
   }
   function toggleSound() {
     soundOn = !soundOn;
     const b = $("soundBtn");
-    b.textContent = soundOn ? "Sound: ON" : "Sound: OFF";
-    b.className = soundOn
-      ? "px-2.5 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 font-semibold"
-      : "px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-400 border border-slate-700";
+    b.textContent = soundOn ? "🔊" : "🔇";
+    b.className = soundOn ? "px-2 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 font-semibold" : "px-2 py-1.5 rounded-lg bg-slate-800 text-slate-400 border border-slate-700";
     if (soundOn) playBeep(false);
   }
   function enableNotifications() {
     if (!("Notification" in window)) return alert("यह browser notifications support नहीं करता।");
-    Notification.requestPermission().then(p => {
-      if (p === "granted") {
-        $("notifBtn").textContent = "Popup: ON";
-        new Notification("CIU Watch Ready", { body: "नया update आते ही popup मिलेगा!" });
-      }
-    });
+    Notification.requestPermission().then(p => { if (p === "granted") { $("notifBtn").textContent = "🔔 ON"; new Notification("CIU Watch Ready", { body: "नया update आते ही popup मिलेगा!" }); } });
   }
 
   // ---------- pause / resume / interval / date ----------
   function updatePauseUI() {
-    const btn = $("pauseBtn");
-    const banner = $("pausedBanner");
-    const totalMissed = missedX + missedMedia;
-    if (selectedDate) {
-      btn.classList.add("hidden");
-      banner.classList.add("hidden");
-      return;
-    }
+    const btn = $("pauseBtn"), banner = $("pausedBanner"), totalMissed = missedX + missedMedia;
+    if (selectedDate) { btn.classList.add("hidden"); banner.classList.add("hidden"); return; }
     btn.classList.remove("hidden");
     if (isPaused) {
-      btn.textContent = totalMissed > 0 ? `▶ Resume (+${totalMissed} new)` : "▶ Resume";
+      btn.textContent = totalMissed > 0 ? `▶ Resume (+${totalMissed})` : "▶ Resume";
       btn.className = "px-2.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold animate-pulse";
       banner.classList.remove("hidden");
       $("pausedBannerText").textContent = totalMissed > 0
-        ? `⏸ स्क्रीन Paused है (बाक़ी users का लाइव चल रहा है)। पीछे ${missedX} नए tweets और ${missedMedia} news जमा हो चुके हैं — Resume दबाते ही सब आ जाएगा और graph बढ़ जाएगा।`
-        : "⏸ स्क्रीन Paused है (बाक़ी users का लाइव चल रहा है)। Background में server डेटा इकट्ठा कर रहा है — Resume दबाते ही छूटे हुए tweets/news और graph अपडेट हो जाएँगे।";
+        ? `⏸ स्क्रीन Paused है (बाक़ी users का लाइव चल रहा है)। पीछे ${missedX} नए tweets और ${missedMedia} news जमा हो चुके हैं — Resume दबाते ही सब आ जाएगा।`
+        : "⏸ स्क्रीन Paused है (बाक़ी users का लाइव चल रहा है)। Server background में डेटा इकट्ठा कर रहा है — Resume दबाते ही छूटे updates आ जाएँगे।";
     } else {
       btn.textContent = "⏸ Pause";
       btn.className = "px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold";
       banner.classList.add("hidden");
     }
-    initIntervalUI();
-    updateConn();
+    initIntervalUI(); updateConn();
   }
-
   function initIntervalUI() {
     $("intervalSelect").value = String(scanInterval);
-    $("timerPill").innerHTML = (isPaused || scanInterval === 0)
-      ? '<span class="text-amber-300 font-bold">Paused</span>'
-      : `<b id="timer">${countdown}</b>s`;
+    $("timerPill").innerHTML = (isPaused || scanInterval === 0) ? '<span class="text-amber-300 font-bold">Paused</span>' : `<b id="timer">${countdown}</b>s`;
   }
-
   function changeInterval() {
     scanInterval = parseInt($("intervalSelect").value, 10);
     localStorage.setItem("ciuwatch_interval", String(scanInterval));
-    if (scanInterval === 0) {
-      isPaused = true;
-      pulseTick = 0;
-    } else {
-      lastActiveInterval = scanInterval;
-      const wasPaused = isPaused;
-      isPaused = false;
-      countdown = scanInterval;
-      missedX = 0; missedMedia = 0;
-      if (wasPaused) fetchFeed(true);
-    }
+    if (scanInterval === 0) { isPaused = true; pulseTick = 0; }
+    else { lastActiveInterval = scanInterval; const w = isPaused; isPaused = false; countdown = scanInterval; missedX = 0; missedMedia = 0; if (w) fetchFeed(true); }
     updatePauseUI();
   }
-
-  function togglePause() {
-    if (isPaused) resumeNow();
-    else {
-      isPaused = true;
-      pulseTick = 0;
-      updatePauseUI();
-    }
-  }
-
+  function togglePause() { if (isPaused) resumeNow(); else { isPaused = true; pulseTick = 0; updatePauseUI(); } }
   function resumeNow() {
     isPaused = false;
-    if (scanInterval === 0) {
-      scanInterval = lastActiveInterval || 30;
-      localStorage.setItem("ciuwatch_interval", String(scanInterval));
-    }
-    countdown = scanInterval;
-    missedX = 0; missedMedia = 0;
-    updatePauseUI();
-    fetchFeed(true);
+    if (scanInterval === 0) { scanInterval = lastActiveInterval || 30; localStorage.setItem("ciuwatch_interval", String(scanInterval)); }
+    countdown = scanInterval; missedX = 0; missedMedia = 0; updatePauseUI(); fetchFeed(true);
   }
-
-  function manualScanNow() {
-    missedX = 0; missedMedia = 0;
-    if (isPaused) updatePauseUI();
-    fetchFeed(true);
-  }
-
+  function manualScanNow() { missedX = 0; missedMedia = 0; if (isPaused) updatePauseUI(); fetchFeed(true); }
   async function checkPausedPulse() {
     if (!isPaused || selectedDate || !lastServerTime) return;
     try {
       const p = await api(`/api/pulse?since=${encodeURIComponent(lastServerTime)}&keywords=${encodeURIComponent(keywords.join(","))}`);
-      missedX = p.new_x || 0;
-      missedMedia = p.new_media || 0;
-      updatePauseUI();
+      missedX = p.new_x || 0; missedMedia = p.new_media || 0; updatePauseUI();
     } catch (e) {}
   }
-
   function onDateChange() {
-    const val = $("datePicker").value;
-    const today = latestPayload && latestPayload.today_date ? latestPayload.today_date : "";
+    const val = $("datePicker").value, today = latestPayload && latestPayload.today_date ? latestPayload.today_date : "";
     selectedDate = (val && val !== today) ? val : "";
-    resetSubFiltersOnly(); firstLoad = true; seenIds.clear(); feedSig = "";
-    updatePauseUI();
-    fetchFeed(true);
+    resetSubFiltersOnly(); firstLoad = true; seenIds.clear(); feedSig = ""; updatePauseUI(); fetchFeed(true);
   }
   function resetToLive() {
-    selectedDate = "";
-    $("datePicker").value = (latestPayload && latestPayload.today_date) || "";
-    resetSubFiltersOnly(); firstLoad = true; seenIds.clear(); feedSig = "";
-    countdown = scanInterval || 30;
-    updatePauseUI();
-    fetchFeed(true);
+    selectedDate = ""; $("datePicker").value = (latestPayload && latestPayload.today_date) || "";
+    resetSubFiltersOnly(); firstLoad = true; seenIds.clear(); feedSig = ""; countdown = scanInterval || 30; updatePauseUI(); fetchFeed(true);
   }
-  function resetSubFiltersOnly() { selectedAccount = null; selectedHandle = null; selectedDistrict = null; selectedDept = null; }
+  function resetSubFiltersOnly() { selectedAccount = null; selectedHandle = null; selectedDistrict = null; selectedDept = null; selectedLeaderId = null; }
 
-  // ---------- search & keywords ----------
-  function onSearchInput() {
-    const hasQ = $("instantSearch").value.trim().length > 0;
-    $("clearSearchBtn").classList.toggle("hidden", !hasQ);
-    feedSig = "";
-    renderRadars();
-    renderFeed();
-  }
-
-  function clearSearchBox() {
-    $("instantSearch").value = "";
-    $("clearSearchBtn").classList.add("hidden");
-    activeKeywordFilter = null;
-    resetSubFiltersOnly();
-    sentFilter = null;
-    syncSentButtons();
-    renderKeywords();
-    feedSig = "";
-    renderRadars();
-    renderFeed();
-  }
-
-  function clearAllFilters() {
-    clearSearchBox();
-  }
-
+  // ---------- keywords (ALL button + single chips) ----------
   function renderKeywords() {
+    const allBtn = $("allKwBtn");
+    allBtn.textContent = allKeywordsActive ? `✓ All Filters (${keywords.length})` : `All Filters (${keywords.length})`;
+    allBtn.className = allKeywordsActive
+      ? "chip-toggle px-2.5 py-1 rounded-full text-xs font-extrabold border bg-sky-500 text-slate-950 border-sky-300 shadow"
+      : "chip-toggle px-2.5 py-1 rounded-full text-xs font-bold border bg-slate-800 text-sky-300 border-sky-500/40 hover:border-sky-400";
+
     $("kwChips").innerHTML = keywords.map((k, i) => {
-      const active = activeKeywordFilter === k;
-      return `<span data-act="kwfilter" data-val="${i}" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs cursor-pointer border ${active ? "bg-amber-500 text-slate-950 border-amber-400 font-bold" : "bg-slate-800/90 text-slate-200 border-slate-700 hover:border-sky-500"}">${esc(k)}<button data-act="kwremove" data-val="${i}" class="ml-1 text-[10px] opacity-70 hover:opacity-100">✕</button></span>`;
+      const active = allKeywordsActive || activeKeywordFilter === k;
+      return `<span data-act="kwfilter" data-val="${i}" class="chip-toggle inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs cursor-pointer border ${active ? "bg-amber-500 text-slate-950 border-amber-400 font-bold" : "bg-slate-800/90 text-slate-200 border-slate-700 hover:border-sky-500"}">${esc(k)}<button data-act="kwremove" data-val="${i}" class="ml-1 text-[10px] opacity-70 hover:opacity-100">✕</button></span>`;
     }).join("");
+    syncHeaderHeight();
+  }
+  function toggleAllKeywordsFilter() {
+    allKeywordsActive = !allKeywordsActive;
+    if (allKeywordsActive) activeKeywordFilter = null;
+    renderKeywords(); feedSig = ""; renderRadars(); renderFeed();
   }
   function addKeyword(e) {
     e.preventDefault();
@@ -594,52 +753,148 @@
     if (val && val.length <= 40 && !val.includes(":") && !keywords.includes(val)) {
       keywords.unshift(val);
       localStorage.setItem("rajwatch_kw", JSON.stringify(keywords));
-      renderKeywords();
-      fetchFeed(true);
+      renderKeywords(); fetchFeed(true);
     }
     inp.value = "";
   }
+  function onSearchInput() {
+    $("clearSearchBtn").classList.toggle("hidden", !$("instantSearch").value.trim());
+    feedSig = ""; renderRadars(); renderFeed();
+  }
+  function clearAllFilters() {
+    $("instantSearch").value = "";
+    $("clearSearchBtn").classList.add("hidden");
+    activeKeywordFilter = null; allKeywordsActive = false; sentFilter = null;
+    resetSubFiltersOnly(); syncSentButtons(); renderKeywords(); feedSig = ""; renderRadars(); renderFeed();
+  }
 
-  // ---------- tabs & filters ----------
+  // ---------- tabs, sentiment & chart controls ----------
   function setSource(src) {
     currentSource = src;
     document.querySelectorAll(".src-btn").forEach(b => {
-      b.className = "src-btn px-2.5 py-1.5 rounded-lg font-semibold " + (b.dataset.src === src ? "bg-sky-600 text-white" : b.dataset.off);
+      b.className = "src-btn px-2.5 py-1.5 rounded-lg font-semibold " + (b.dataset.src === src ? "bg-sky-600 text-white shadow" : b.dataset.off);
     });
-    feedSig = "";
-    renderFeed();
+    feedSig = ""; renderFeed();
   }
   function setAccSource(src) {
     accSourceFilter = src;
     ["ALL", "X", "MEDIA"].forEach(k => {
-      $("accSrc" + k).className = k === src
-        ? "px-2.5 py-1 rounded-lg bg-sky-600 text-white font-semibold"
-        : "px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300";
+      $("accSrc" + k).className = k === src ? "px-2.5 py-1 rounded-lg bg-sky-600 text-white font-semibold" : "px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300";
     });
     renderAccounts();
   }
   function setGraphScope(scope) {
-    graphScope = scope;
-    $("gScopeALL").className = scope === "ALL" ? "px-2 py-0.5 rounded bg-sky-600 text-white font-bold" : "px-2 py-0.5 rounded text-slate-300 font-bold";
-    $("gScopeX").className = scope === "X" ? "px-2 py-0.5 rounded bg-sky-600 text-white font-bold" : "px-2 py-0.5 rounded text-slate-300 font-bold";
+    graphScope = scope; customGraphState = null;
+    $("cgResetBtn").classList.add("hidden"); $("cgMeta").classList.add("hidden");
+    $("gScopeALL").className = scope === "ALL" ? "px-1.5 py-0.5 rounded bg-sky-600 text-white font-bold" : "px-1.5 py-0.5 rounded text-slate-300 font-bold";
+    $("gScopeX").className = scope === "X" ? "px-1.5 py-0.5 rounded bg-sky-600 text-white font-bold" : "px-1.5 py-0.5 rounded text-slate-300 font-bold";
+    lastHourlySig = ""; lastDonutSig = "";
+    if (latestPayload) renderCharts(latestPayload);
+  }
+  function setChartType(type) {
+    if (hourlyChartType === type) return;
+    hourlyChartType = type;
+    $("cTypeLine").className = type === "line" ? "px-1.5 py-0.5 rounded bg-sky-600 text-white font-bold" : "px-1.5 py-0.5 rounded text-slate-300 font-bold";
+    $("cTypeBar").className = type === "bar" ? "px-1.5 py-0.5 rounded bg-sky-600 text-white font-bold" : "px-1.5 py-0.5 rounded text-slate-300 font-bold";
+    if (hourlyChartObj) { hourlyChartObj.destroy(); hourlyChartObj = null; }
+    lastHourlySig = "";
     if (latestPayload) renderCharts(latestPayload);
   }
   function syncSentButtons() {
-    $("negOnlyBtn").className = sentFilter === "negative"
-      ? "px-2.5 py-1.5 rounded-lg bg-red-600 text-white font-semibold"
-      : "px-2.5 py-1.5 rounded-lg bg-red-950/60 border border-red-700/50 text-red-300";
-    $("posOnlyBtn").className = sentFilter === "positive"
-      ? "px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold"
-      : "px-2.5 py-1.5 rounded-lg bg-emerald-950/60 border border-emerald-700/50 text-emerald-300";
+    $("sentAllBtn").className = sentFilter === null ? "px-2.5 py-1 rounded-lg font-semibold bg-sky-600 text-white" : "px-2.5 py-1 rounded-lg font-semibold bg-slate-800 text-slate-300";
+    $("sentPosBtn").className = sentFilter === "positive" ? "px-2.5 py-1 rounded-lg font-semibold bg-emerald-600 text-white" : "px-2.5 py-1 rounded-lg font-semibold bg-emerald-950/70 border border-emerald-700/50 text-emerald-300";
+    $("sentNegBtn").className = sentFilter === "negative" ? "px-2.5 py-1 rounded-lg font-semibold bg-red-600 text-white" : "px-2.5 py-1 rounded-lg font-semibold bg-red-950/70 border border-red-700/50 text-red-300";
+    $("sentNeuBtn").className = sentFilter === "neutral" ? "px-2.5 py-1 rounded-lg font-semibold bg-slate-500 text-white" : "px-2.5 py-1 rounded-lg font-semibold bg-slate-800 border border-slate-600/60 text-slate-200";
   }
-  function toggleSentFilter(mode) {
-    sentFilter = sentFilter === mode ? null : mode;
-    syncSentButtons();
-    feedSig = "";
-    renderFeed();
+  function setSentFilter(mode) {
+    sentFilter = (sentFilter === mode && mode !== null) ? null : mode;
+    syncSentButtons(); feedSig = ""; renderRadars(); renderFeed();
   }
 
-  // ---------- global click delegation ----------
+  // ---------- self-learning feedback ----------
+  async function sendFeedback(itemId, target, confirmOverride = false) {
+    const it = allItems.find(x => x.id === itemId);
+    try {
+      const res = await api("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          item_id: itemId, text: it ? it.text : "", author: it ? it.author : "",
+          handle: it ? (it.handle || "") : "", target_sentiment: target, confirm_override: confirmOverride
+        })
+      });
+      if (res.requires_confirm) {
+        pendingFeedback = { itemId, target };
+        $("conflictMsg").textContent = res.message;
+        $("conflictSnippet").textContent = it ? it.text.slice(0, 220) : "";
+        $("conflictModal").classList.remove("hidden");
+        return;
+      }
+      showToast(res.message, res.flagged ? "amber" : "emerald");
+      fetchFeed(false);
+    } catch (e) { showToast("Update fail: " + e.message, "amber"); }
+  }
+  function confirmConflictFeedback() {
+    if (!pendingFeedback) return;
+    const pf = pendingFeedback; pendingFeedback = null;
+    closeModal("conflictModal");
+    sendFeedback(pf.itemId, pf.target, true);
+  }
+  async function openBrainModal() {
+    $("brainModal").classList.remove("hidden");
+    $("brainTokensBox").innerHTML = '<span class="text-xs text-slate-400">Loading...</span>';
+    try {
+      const d = await api("/api/learning");
+      const tuned = d.last_self_tune ? (" · Last auto-tune: " + timeAgo(d.last_self_tune)) : " · Auto-tuning active";
+      $("brainSub").textContent = `सीखे हुए patterns: ${d.total_learned_tokens} · Overrides: ${d.total_overrides}${tuned}`;
+      $("brainTokensBox").innerHTML = (d.top_tokens || []).map(t => {
+        const cls = t.negative > t.positive ? "bg-red-950/70 border-red-500/40 text-red-200" : t.positive > t.negative ? "bg-emerald-950/70 border-emerald-500/40 text-emerald-200" : "bg-slate-800 border-slate-600 text-slate-200";
+        return `<span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[11px] ${cls}">
+          <b>${esc(t.token)}</b> <span class="text-[10px] opacity-80">+${t.positive}/-${t.negative}/○${t.neutral}</span>
+          <button data-act="deltoken" data-val="${esc(t.token)}" class="ml-0.5 text-slate-400 hover:text-white font-bold">✕</button>
+        </span>`;
+      }).join("") || '<span class="text-xs text-slate-500">अभी तक कोई custom pattern नहीं सीखा है। किसी भी पोस्ट पर +Pos / -Neg / ○Neu दबाकर AI को सिखाएँ।</span>';
+
+      $("brainLogBox").innerHTML = (d.recent_feedback || []).map(f => {
+        const badge = f.flagged ? '<span class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold text-[10px]">⚠ Guardrail Quarantined</span>' : '<span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold text-[10px]">Learned</span>';
+        return `<div class="p-2 rounded-lg bg-slate-950 border border-slate-800 flex items-start justify-between gap-2">
+          <div><span class="text-slate-400">${esc(f.from)} →</span> <b class="text-sky-300">${esc(f.to)}</b> ${badge}<div class="text-slate-300 mt-0.5">${esc(f.snippet)}</div></div>
+        </div>`;
+      }).join("") || '<span class="text-xs text-slate-500">कोई हालिया suggestion नहीं।</span>';
+    } catch (e) { $("brainTokensBox").innerHTML = '<span class="text-xs text-red-400">Load नहीं हुआ</span>'; }
+  }
+
+  // ---------- custom filter graph ----------
+  async function runCustomGraph(overrideQ = null, overrideSrc = null, leaderId = "") {
+    const q = overrideQ !== null ? overrideQ : $("cgQuery").value.trim();
+    const src = overrideSrc !== null ? overrideSrc : $("cgSource").value;
+    if (!q && !leaderId) { resetCustomGraph(); return; }
+    if (overrideQ !== null) $("cgQuery").value = q;
+    if (overrideSrc !== null) $("cgSource").value = src;
+    if (uiHidden.graphPane) toggleSection("graphPane");
+    if (uiHidden.wBodyHourly) toggleWidget("wBodyHourly");
+    try {
+      const data = await api(`/api/custom-graph?q=${encodeURIComponent(q)}&source=${encodeURIComponent(src)}&leader=${encodeURIComponent(leaderId)}`);
+      customGraphState = { q, source: src, leader: leaderId, data };
+      $("cgResetBtn").classList.remove("hidden");
+      $("cgMeta").textContent = `Custom Graph: "${q || leaderId}" (${src}) · ${data.matched} posts (+${data.totals.positive} / -${data.totals.negative} / ○${data.totals.neutral})`;
+      $("cgMeta").classList.remove("hidden");
+      lastHourlySig = ""; lastDonutSig = "";
+      renderCharts(latestPayload);
+    } catch (e) { showToast("Custom graph error: " + e.message, "amber"); }
+  }
+  function resetCustomGraph() {
+    customGraphState = null; $("cgQuery").value = "";
+    $("cgResetBtn").classList.add("hidden"); $("cgMeta").classList.add("hidden");
+    lastHourlySig = ""; lastDonutSig = "";
+    if (latestPayload) renderCharts(latestPayload);
+  }
+  function plotSearchInCustomGraph() {
+    const q = $("instantSearch").value.trim() || activeKeywordFilter || "";
+    if (q) runCustomGraph(q, currentSource === "X" ? "X" : "ALL");
+  }
+
+  // ---------- click delegation ----------
   document.addEventListener("click", e => {
     const sb = e.target.closest(".src-btn");
     if (sb) { setSource(sb.dataset.src); return; }
@@ -648,85 +903,254 @@
     e.stopPropagation();
     const v = el.dataset.val || "";
     switch (el.dataset.act) {
-      case "kwfilter": { const k = keywords[+v]; activeKeywordFilter = activeKeywordFilter === k ? null : k; renderKeywords(); feedSig = ""; renderRadars(); renderFeed(); break; }
-      case "kwremove": { const k = keywords[+v]; keywords.splice(+v, 1); if (activeKeywordFilter === k) activeKeywordFilter = null; localStorage.setItem("rajwatch_kw", JSON.stringify(keywords)); renderKeywords(); fetchFeed(true); break; }
+      case "kwfilter": {
+        const k = keywords[+v]; allKeywordsActive = false;
+        activeKeywordFilter = activeKeywordFilter === k ? null : k;
+        renderKeywords(); feedSig = ""; renderRadars(); renderFeed(); break;
+      }
+      case "kwremove": {
+        const k = keywords[+v]; keywords.splice(+v, 1);
+        if (activeKeywordFilter === k) activeKeywordFilter = null;
+        if (!keywords.length) allKeywordsActive = false;
+        localStorage.setItem("rajwatch_kw", JSON.stringify(keywords));
+        renderKeywords(); fetchFeed(true); break;
+      }
       case "district": selectedDistrict = selectedDistrict === v ? null : v; feedSig = ""; renderRadars(); renderFeed(); break;
       case "dept": selectedDept = selectedDept === v ? null : v; feedSig = ""; renderRadars(); renderFeed(); break;
       case "account": selectedAccount = (selectedAccount === v ? null : v); selectedHandle = null; feedSig = ""; renderRadars(); if (currentSource !== "SEARCH") setSource("ALL"); else renderFeed(); break;
       case "handle": selectedHandle = (selectedHandle === v ? null : v); selectedAccount = null; feedSig = ""; renderRadars(); if (currentSource !== "SEARCH") setSource("X"); else renderFeed(); break;
+      case "leaderchart": selectLeaderChart(v); break;
+      case "leadertweets": selectedLeaderId = v; selectedHandle = null; selectedAccount = null; feedSig = ""; renderRadars(); setSource("X"); break;
+      case "leaderquick": leaderChartFocusId = v; setSource("LEADERS"); break;
+      case "reclass": sendFeedback(el.dataset.id, v, false); break;
+      case "deltoken": api("/api/learning/" + encodeURIComponent(v), { method: "DELETE" }).then(() => { openBrainModal(); fetchFeed(false); }); break;
       case "delmanual": if (confirm("यह पोस्ट हटानी है?")) api("/api/manual/" + encodeURIComponent(v), { method: "DELETE" }).then(() => fetchFeed(true)); break;
       case "playtv": playTv(+v); break;
     }
   });
 
-  // ---------- rendering ----------
-  function highlightText(txt) {
-    const terms = [...keywords];
-    const q = $("instantSearch").value.trim();
-    if (q.length >= 2) {
-      terms.push(q);
-      const qNoSp = q.replace(/\s+/g, "");
-      if (qNoSp.length >= 3 && qNoSp !== q) terms.push(qNoSp);
-    }
-    const ks = [...new Set(terms.filter(k => k.length >= 2))].map(k => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-    if (!ks.length) return esc(txt);
-    const re = new RegExp("(" + ks.join("|") + ")", "gi");
-    return String(txt || "").split(re).map((part, i) => i % 2 === 1 ? `<mark class="bg-amber-400/25 text-amber-200 px-1 rounded">${esc(part)}</mark>` : esc(part)).join("");
-  }
-
-  function mkLine(chart, labels, neg, pos, neu) {
-    chart.data.labels = labels;
-    chart.data.datasets[0].data = neg;
-    chart.data.datasets[1].data = pos;
-    chart.data.datasets[2].data = neu;
-    chart.update("none");
-  }
+  // ---------- ADVANCED & SCROLL-STABLE CHARTS ----------
   function renderCharts(data) {
-    const useX = graphScope === "X";
-    const cd = useX ? data.hourly_chart_x : data.hourly_chart;
-    $("chartTitle").textContent = (useX ? "Only X" : "All") + (data.mode === "archive" ? ` Sentiment (${data.active_date})` : " Sentiment (IST)");
-    $("graphXCount").textContent = "X tweets counted in graph: " + data.stats.x_today_count;
-    $("donutTitle").textContent = useX ? "Sentiment Ratio (Only X)" : "Sentiment Ratio (All)";
+    if (!data) return;
+    let cd, dv, title, dTitle;
+    if (customGraphState && customGraphState.data) {
+      const c = customGraphState.data;
+      cd = c.chart; dv = [c.totals.negative, c.totals.positive, c.totals.neutral];
+      title = `Custom: ${customGraphState.q || customGraphState.leader}`;
+      dTitle = `Ratio (${customGraphState.q || customGraphState.leader})`;
+    } else {
+      const useX = graphScope === "X";
+      cd = useX ? data.hourly_chart_x : data.hourly_chart;
+      const s = data.stats;
+      dv = useX ? [s.x_negative, s.x_positive, s.x_neutral] : [s.negative, s.positive, s.neutral];
+      title = (useX ? "Only X" : "All") + (data.mode === "archive" ? ` (${data.active_date})` : " Sentiment (IST)");
+      dTitle = useX ? "Sentiment Ratio (Only X)" : "Sentiment Ratio (All)";
+    }
+    $("chartTitle").textContent = title;
+    $("graphXCount").textContent = "X tweets in graph: " + data.stats.x_today_count;
+    $("donutTitle").textContent = dTitle;
 
+    // 1. Hourly Sentiment Chart (Line or Stacked Bar)
+    const hSig = hourlyChartType + "|" + JSON.stringify([cd.labels, cd.negative, cd.positive, cd.neutral]);
     if (!hourlyChartObj) {
+      const isBar = hourlyChartType === "bar";
       hourlyChartObj = new Chart($("hourlyChart").getContext("2d"), {
-        type: "line",
-        data: { labels: [], datasets: [
-          { label: "Negative", data: [], borderColor: "#f87171", backgroundColor: "rgba(248,113,113,0.18)", fill: true, tension: 0.35, borderWidth: 2 },
-          { label: "Positive", data: [], borderColor: "#34d399", backgroundColor: "rgba(52,211,153,0.14)", fill: true, tension: 0.35, borderWidth: 2 },
-          { label: "Neutral", data: [], borderColor: "#94a3b8", borderDash: [3, 3], tension: 0.35, borderWidth: 1.3 }
+        type: hourlyChartType,
+        data: { labels: cd.labels, datasets: [
+          { label: "Negative", data: cd.negative, borderColor: "#f87171", backgroundColor: isBar ? "rgba(239,68,68,0.85)" : "rgba(248,113,113,0.16)", fill: !isBar, tension: 0.32, borderWidth: isBar ? 0 : 2, pointRadius: 2 },
+          { label: "Positive (BJP)", data: cd.positive, borderColor: "#34d399", backgroundColor: isBar ? "rgba(16,185,129,0.85)" : "rgba(52,211,153,0.15)", fill: !isBar, tension: 0.32, borderWidth: isBar ? 0 : 2, pointRadius: 2 },
+          { label: "Neutral", data: cd.neutral, borderColor: "#94a3b8", backgroundColor: isBar ? "rgba(100,116,139,0.75)" : "transparent", borderDash: isBar ? [] : [3, 3], tension: 0.32, borderWidth: isBar ? 0 : 1.5, pointRadius: 1.5 }
         ] },
         options: {
-          animation: false, responsive: true, maintainAspectRatio: false,
+          animation: false, responsive: true, maintainAspectRatio: false, resizeDelay: 250,
+          interaction: { mode: "index", intersect: false },
           plugins: { legend: { labels: { color: "#cbd5e1", font: { size: 10 }, boxWidth: 10 } } },
           scales: {
-            x: { ticks: { color: "#94a3b8", font: { size: 9 } }, grid: { color: "rgba(51,65,85,0.25)" } },
-            y: { beginAtZero: true, ticks: { color: "#94a3b8", font: { size: 9 }, precision: 0 }, grid: { color: "rgba(51,65,85,0.25)" } }
+            x: { stacked: isBar, ticks: { color: "#94a3b8", font: { size: 9 } }, grid: { color: "rgba(51,65,85,0.22)" } },
+            y: { stacked: isBar, beginAtZero: true, ticks: { color: "#94a3b8", font: { size: 9 }, precision: 0 }, grid: { color: "rgba(51,65,85,0.22)" } }
           }
         }
       });
+      lastHourlySig = hSig;
+    } else if (hSig !== lastHourlySig) {
+      hourlyChartObj.data.labels = cd.labels;
+      hourlyChartObj.data.datasets[0].data = cd.negative;
+      hourlyChartObj.data.datasets[1].data = cd.positive;
+      hourlyChartObj.data.datasets[2].data = cd.neutral;
+      hourlyChartObj.update("none");
+      lastHourlySig = hSig;
     }
-    mkLine(hourlyChartObj, cd.labels, cd.negative, cd.positive, cd.neutral);
 
-    const s = data.stats;
-    const dv = useX ? [s.x_negative, s.x_positive, s.x_neutral] : [s.negative, s.positive, s.neutral];
+    // 2. Always-On Internet Leader Buzz Horizontal Bar Chart (Despite Any Filter!)
+    const topBuzz = (data.leaders || []).filter(l => (l.total_buzz || l.x_total) > 0).slice(0, 7);
+    const bSig = JSON.stringify(topBuzz.map(l => [l.id, l.total_positive, l.total_negative, l.total_neutral]));
+    if (!leaderBuzzChartObj) {
+      leaderBuzzChartObj = new Chart($("leaderBuzzChart").getContext("2d"), {
+        type: "bar",
+        data: {
+          labels: topBuzz.map(l => l.name.split(" ")[0]),
+          datasets: [
+            { label: "Pos", data: topBuzz.map(l => l.total_positive || l.x_positive), backgroundColor: "#10b981", borderRadius: 3 },
+            { label: "Neg", data: topBuzz.map(l => l.total_negative || l.x_negative), backgroundColor: "#ef4444", borderRadius: 3 },
+            { label: "Neu", data: topBuzz.map(l => l.total_neutral || l.x_neutral), backgroundColor: "#64748b", borderRadius: 3 }
+          ]
+        },
+        options: {
+          indexAxis: "y", animation: false, responsive: true, maintainAspectRatio: false, resizeDelay: 250,
+          plugins: { legend: { labels: { color: "#cbd5e1", font: { size: 9 }, boxWidth: 8 } } },
+          scales: {
+            x: { stacked: true, beginAtZero: true, ticks: { color: "#94a3b8", font: { size: 9 }, precision: 0 }, grid: { color: "rgba(51,65,85,0.22)" } },
+            y: { stacked: true, ticks: { color: "#e2e8f0", font: { size: 10, weight: "600" } }, grid: { display: false } }
+          },
+          onClick: (_, els) => {
+            if (els.length && topBuzz[els[0].index]) {
+              leaderChartFocusId = topBuzz[els[0].index].id;
+              setSource("LEADERS");
+            }
+          }
+        }
+      });
+      lastBuzzSig = bSig;
+    } else if (bSig !== lastBuzzSig) {
+      leaderBuzzChartObj.data.labels = topBuzz.map(l => l.name.split(" ")[0]);
+      leaderBuzzChartObj.data.datasets[0].data = topBuzz.map(l => l.total_positive || l.x_positive);
+      leaderBuzzChartObj.data.datasets[1].data = topBuzz.map(l => l.total_negative || l.x_negative);
+      leaderBuzzChartObj.data.datasets[2].data = topBuzz.map(l => l.total_neutral || l.x_neutral);
+      leaderBuzzChartObj.update("none");
+      lastBuzzSig = bSig;
+    }
+
+    // 3. Sentiment Ratio Donut
+    const dSig = JSON.stringify(dv);
     if (!donutChartObj) {
       donutChartObj = new Chart($("donutChart").getContext("2d"), {
         type: "doughnut",
-        data: { labels: ["Negative", "Positive", "Neutral"], datasets: [{ data: dv, backgroundColor: ["#ef4444", "#10b981", "#64748b"], borderWidth: 0 }] },
+        data: { labels: ["Negative", "Positive (BJP)", "Neutral"], datasets: [{ data: dv, backgroundColor: ["#ef4444", "#10b981", "#64748b"], borderWidth: 0 }] },
         options: {
-          animation: false, responsive: true, maintainAspectRatio: false, cutout: "62%",
+          animation: false, responsive: true, maintainAspectRatio: false, resizeDelay: 250, cutout: "64%",
           plugins: { legend: { position: "right", labels: { color: "#cbd5e1", font: { size: 10 }, boxWidth: 10 } } }
         }
       });
-    } else {
+      lastDonutSig = dSig;
+    } else if (dSig !== lastDonutSig) {
       donutChartObj.data.datasets[0].data = dv;
       donutChartObj.update("none");
+      lastDonutSig = dSig;
     }
   }
 
+  // ---------- CMO & LEADERS FULL TRACKER ----------
+  function selectLeaderChart(lid) { leaderChartFocusId = lid; lastLeaderChartSig = ""; renderLeaders(); }
+  function openSelectedLeaderTweets() {
+    if (!leaderChartFocusId) return;
+    selectedLeaderId = leaderChartFocusId; selectedHandle = null; selectedAccount = null;
+    renderRadars(); setSource("X");
+  }
+  function renderLeaders() {
+    const list = (latestPayload && latestPayload.leaders) || [];
+    $("postCount").textContent = list.length + " leaders";
+    const active = list.find(l => l.id === leaderChartFocusId) || null;
+    $("leaderBackCompareBtn").classList.toggle("hidden", !active);
+    $("leaderViewTweetsBtn").classList.toggle("hidden", !active);
+
+    if (active) {
+      $("leaderChartTitle").textContent = `👑 ${active.name} (${active.handle}) — Hourly Twitter (X) Graph`;
+      $("leaderChartSub").textContent = `Total Buzz: ${active.total_buzz || active.x_total} · X: ${active.x_total} (+${active.x_positive} / -${active.x_negative} / ○${active.x_neutral}) · News: ${active.media_total}`;
+      const hx = active.hourly_x, sig = "L:" + active.id + JSON.stringify(hx);
+      if (sig !== lastLeaderChartSig) {
+        if (leaderChartObj) leaderChartObj.destroy();
+        leaderChartObj = new Chart($("leaderChart").getContext("2d"), {
+          type: "line",
+          data: { labels: hx.labels, datasets: [
+            { label: "Negative", data: hx.negative, borderColor: "#f87171", backgroundColor: "rgba(248,113,113,0.18)", fill: true, tension: 0.3, borderWidth: 2 },
+            { label: "Positive (BJP)", data: hx.positive, borderColor: "#34d399", backgroundColor: "rgba(52,211,153,0.16)", fill: true, tension: 0.3, borderWidth: 2 },
+            { label: "Neutral", data: hx.neutral, borderColor: "#94a3b8", borderDash: [3, 3], tension: 0.3, borderWidth: 1.5 }
+          ] },
+          options: {
+            animation: false, responsive: true, maintainAspectRatio: false, resizeDelay: 250,
+            plugins: { legend: { labels: { color: "#cbd5e1", font: { size: 11 }, boxWidth: 10 } } },
+            scales: { x: { ticks: { color: "#94a3b8", font: { size: 10 } }, grid: { color: "rgba(51,65,85,0.25)" } },
+                      y: { beginAtZero: true, ticks: { color: "#94a3b8", font: { size: 10 }, precision: 0 }, grid: { color: "rgba(51,65,85,0.25)" } } }
+          }
+        });
+        lastLeaderChartSig = sig;
+      }
+    } else {
+      $("leaderChartTitle").textContent = "👑 Rajasthan Prominent Leaders & CMO — Internet & X Talk Volume";
+      $("leaderChartSub").textContent = "किसी भी नेता पर क्लिक करके उसका hourly Twitter sentiment graph देखें";
+      const top = list.slice(0, 10);
+      const sig = "BAR:" + JSON.stringify(top.map(l => [l.id, l.total_positive, l.total_negative, l.total_neutral]));
+      if (sig !== lastLeaderChartSig) {
+        if (leaderChartObj) leaderChartObj.destroy();
+        leaderChartObj = new Chart($("leaderChart").getContext("2d"), {
+          type: "bar",
+          data: {
+            labels: top.map(l => l.name.split(" ")[0]),
+            datasets: [
+              { label: "Positive (BJP)", data: top.map(l => l.total_positive || l.x_positive), backgroundColor: "#10b981" },
+              { label: "Negative", data: top.map(l => l.total_negative || l.x_negative), backgroundColor: "#ef4444" },
+              { label: "Neutral", data: top.map(l => l.total_neutral || l.x_neutral), backgroundColor: "#64748b" }
+            ]
+          },
+          options: {
+            animation: false, responsive: true, maintainAspectRatio: false, resizeDelay: 250,
+            plugins: { legend: { labels: { color: "#cbd5e1", font: { size: 11 }, boxWidth: 10 } } },
+            scales: {
+              x: { stacked: true, ticks: { color: "#cbd5e1", font: { size: 10 } }, grid: { display: false } },
+              y: { stacked: true, beginAtZero: true, ticks: { color: "#94a3b8", font: { size: 10 }, precision: 0 }, grid: { color: "rgba(51,65,85,0.25)" } }
+            }
+          }
+        });
+        lastLeaderChartSig = sig;
+      }
+    }
+
+    $("leadersGrid").innerHTML = list.map(l => {
+      const isSel = leaderChartFocusId === l.id;
+      const pCls = PARTY_BADGES[l.party] || "bg-slate-700 text-slate-200 border-slate-600";
+      const topics = (l.topics || []).map(t => `<span class="px-1.5 py-0.5 rounded bg-slate-800 text-sky-200 text-[10px]">${esc(t.name)} ×${t.count}</span>`).join(" ");
+      const latest = l.latest_tweet
+        ? `<div class="p-2 rounded-lg bg-slate-950/90 border border-slate-800 text-[11px] text-slate-300 mt-1.5"><span class="text-sky-400 font-semibold">${esc(l.latest_tweet.author)}</span>: ${esc(l.latest_tweet.text)}</div>`
+        : `<div class="text-[11px] text-slate-500 mt-1.5">अभी कोई X tweet नहीं मिला</div>`;
+      return `<div class="glass rounded-xl p-3.5 space-y-2 transition ${isSel ? "ring-2 ring-sky-400 border-sky-400" : "hover:border-indigo-400/60"}">
+        <div class="flex items-start justify-between gap-2">
+          <div>
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="text-sm font-extrabold text-white">${esc(l.name)}</span>
+              <span class="px-1.5 py-0.5 rounded border text-[9px] font-bold ${pCls}">${esc(l.party)}</span>
+            </div>
+            <div class="text-[11px] text-slate-400">${esc(l.role)} · <span class="text-sky-400">${esc(l.handle)}</span></div>
+          </div>
+          <div class="text-right">
+            <div class="text-base font-extrabold text-white">${l.total_buzz || l.x_total} <span class="text-[10px] font-normal text-orange-300">Buzz</span></div>
+            <div class="text-[10px] text-slate-400">X: ${l.x_total} · News: ${l.media_total}</div>
+          </div>
+        </div>
+        <div class="flex items-center justify-between text-[11px] font-bold">
+          <span class="text-emerald-400">+${l.x_positive} (${l.x_pos_pct}%)</span>
+          <span class="text-red-400">-${l.x_negative} (${l.x_neg_pct}%)</span>
+          <span class="text-slate-400">○${l.x_neutral} (${l.x_neu_pct}%)</span>
+        </div>
+        ${pctBar(l.x_pos_pct, l.x_neg_pct, l.x_neu_pct)}
+        ${topics ? `<div class="flex flex-wrap gap-1">${topics}</div>` : ""}
+        ${latest}
+        <div class="flex items-center justify-between pt-2 border-t border-slate-800/80 text-[11px]">
+          <button data-act="leaderchart" data-val="${esc(l.id)}" class="px-2.5 py-1 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/35 border border-indigo-400/40 text-indigo-200 font-semibold">📈 Hourly X Graph</button>
+          <button data-act="leadertweets" data-val="${esc(l.id)}" class="px-2.5 py-1 rounded-lg bg-sky-600/20 hover:bg-sky-600/40 border border-sky-500/40 text-sky-300 font-semibold">Tweets देखें →</button>
+        </div>
+      </div>`;
+    }).join("");
+  }
+
+  // ---------- radars, handles, accounts, feed ----------
   function renderRadars() {
     if (!latestPayload) return;
+    $("leaderMiniStrip").innerHTML = (latestPayload.leaders || []).filter(l => (l.total_buzz || l.x_total) > 0).slice(0, 8).map(l => {
+      return `<button data-act="leaderquick" data-val="${esc(l.id)}" class="px-2 py-1 rounded-md text-[10px] border border-orange-500/30 bg-slate-900/90 text-slate-100 hover:border-orange-400">
+        ${esc(l.name.split(" ")[0])}: <b class="text-orange-300">${l.total_buzz || l.x_total}</b> <span class="text-emerald-400">+${l.total_positive || l.x_positive}</span>/<span class="text-red-400">-${l.total_negative || l.x_negative}</span>
+      </button>`;
+    }).join("") || '<span class="text-[11px] text-slate-500">Leader buzz load ho raha hai...</span>';
+
     $("districtStrip").innerHTML = (latestPayload.districts || []).map(d => {
       const active = selectedDistrict === d.name ? "ring-2 ring-amber-400 bg-amber-500/20" : "bg-slate-800/80";
       const neg = d.negative > 0 ? `<span class="text-red-400 font-bold ml-1">(${d.negative}N)</span>` : "";
@@ -738,102 +1162,79 @@
       return `<button data-act="dept" data-val="${esc(d.name)}" class="px-2 py-1 rounded-md text-[11px] border border-slate-700 text-slate-200 hover:border-sky-400 ${active}">${esc(d.name)}: ${d.total}${neg}</button>`;
     }).join("");
 
-    const q = $("instantSearch").value.trim();
-    const parts = [];
+    const q = $("instantSearch").value.trim(), parts = [];
+    if (allKeywordsActive) parts.push(`All ${keywords.length} Filters`);
+    if (activeKeywordFilter) parts.push(`Filter: ${activeKeywordFilter}`);
     if (q) parts.push(`Search: "${q}"`);
-    if (activeKeywordFilter) parts.push(`Keyword: ${activeKeywordFilter}`);
+    if (sentFilter) parts.push(`Sentiment: ${sentFilter.toUpperCase()}`);
+    if (selectedLeaderId) {
+      const ld = (latestPayload.leaders || []).find(l => l.id === selectedLeaderId);
+      parts.push("Leader: " + (ld ? ld.name : selectedLeaderId));
+    }
     if (selectedAccount) parts.push("Account: " + selectedAccount);
     if (selectedHandle) parts.push("Handle: " + selectedHandle);
     if (selectedDistrict) parts.push("District: " + selectedDistrict);
     if (selectedDept) parts.push("Dept: " + selectedDept);
     $("subFilterBar").classList.toggle("hidden", !parts.length);
-    $("subFilterText").textContent = "Active Filter → " + parts.join(" | ");
+    $("subFilterText").textContent = "Active → " + parts.join(" | ");
 
     $("sourcesBox").innerHTML = (latestPayload.sources || []).map(s => {
       const dot = s.ok ? "bg-emerald-400" : "bg-red-500";
       const age = s.last_ok_s == null ? "कभी नहीं" : (s.last_ok_s < 90 ? s.last_ok_s + "s" : Math.floor(s.last_ok_s / 60) + "m") + " पहले";
-      return `<div class="flex items-start gap-2"><span class="mt-1 h-2 w-2 rounded-full ${dot} shrink-0"></span><div class="flex-1"><span class="text-slate-200">${esc(s.name)}</span> <span class="text-slate-500">· आख़िरी सफल: ${age}</span>${s.ok ? "" : `<div class="text-red-400 text-[10px]">${esc(s.error)}</div>`}</div></div>`;
+      return `<div class="flex items-start gap-2"><span class="mt-1 h-2 w-2 rounded-full ${dot} shrink-0"></span><div class="flex-1"><span class="text-slate-200">${esc(s.name)}</span> <span class="text-slate-500">· ${age}</span>${s.ok ? "" : `<div class="text-red-400 text-[10px]">${esc(s.error)}</div>`}</div></div>`;
     }).join("") || '<span class="text-slate-500">अभी कोई डेटा नहीं</span>';
   }
 
   function pctBar(p, n, u) {
-    return `<div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden flex">
-      <div style="width:${p}%" class="bg-emerald-500"></div><div style="width:${n}%" class="bg-red-500"></div><div style="width:${u}%" class="bg-slate-600"></div></div>`;
+    return `<div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden flex"><div style="width:${p}%" class="bg-emerald-500"></div><div style="width:${n}%" class="bg-red-500"></div><div style="width:${u}%" class="bg-slate-600"></div></div>`;
+  }
+  function highlightText(txt) {
+    const terms = [...keywords], q = $("instantSearch").value.trim();
+    if (q.length >= 2) { terms.push(q); const qc = q.replace(/\s+/g, ""); if (qc.length >= 3 && qc !== q) terms.push(qc); }
+    const ks = [...new Set(terms.filter(k => k.length >= 2))].map(k => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    if (!ks.length) return esc(txt);
+    const re = new RegExp("(" + ks.join("|") + ")", "gi");
+    return String(txt || "").split(re).map((part, i) => i % 2 === 1 ? `<mark class="bg-amber-400/25 text-amber-200 px-1 rounded">${esc(part)}</mark>` : esc(part)).join("");
   }
 
-  // Recomputes handle-wise stats dynamically when user searches a topic like "bhajan lal"
   function computeHandlesFromTweets(xItems) {
-    const map = new Map();
-    const tagRx = /#[\w\u0900-\u097F]+/g;
+    const map = new Map(), tagRx = /#[\w\u0900-\u097F]+/g;
     xItems.forEach(it => {
       const hkey = it.handle || it.author;
       let st = map.get(hkey);
-      if (!st) {
-        st = { handle: hkey, name: it.author, total: 0, positive: 0, negative: 0, neutral: 0, likes: 0, retweets: 0, _dept: {}, _dist: {}, _tags: {}, worst: null };
-        map.set(hkey, st);
-      }
-      st.total++;
-      st[it.sentiment] = (st[it.sentiment] || 0) + 1;
-      st.likes += (it.likes || 0);
-      st.retweets += (it.retweets || 0);
+      if (!st) { st = { handle: hkey, name: it.author, total: 0, positive: 0, negative: 0, neutral: 0, likes: 0, retweets: 0, _dept: {}, _dist: {}, _tags: {}, worst: null }; map.set(hkey, st); }
+      st.total++; st[it.sentiment] = (st[it.sentiment] || 0) + 1;
+      st.likes += (it.likes || 0); st.retweets += (it.retweets || 0);
       st._dept[it.department] = (st._dept[it.department] || 0) + 1;
       if (it.district && it.district !== "Statewide") st._dist[it.district] = (st._dist[it.district] || 0) + 1;
-      const tags = new Set((it.text.match(tagRx) || []).map(t => t.toLowerCase()));
-      tags.forEach(tg => { st._tags[tg] = (st._tags[tg] || 0) + 1; });
+      new Set((it.text.match(tagRx) || []).map(t => t.toLowerCase())).forEach(tg => { st._tags[tg] = (st._tags[tg] || 0) + 1; });
       if (it.sentiment === "negative") {
         const eng = (it.likes || 0) + (it.retweets || 0);
         if (!st.worst || eng >= st.worst.eng) st.worst = { text: it.text.slice(0, 160), url: it.url, eng };
       }
     });
-    const topN = (obj, n) => Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, n).map(([name, count]) => ({ name, count }));
+    const topN = (o, n) => Object.entries(o).sort((a, b) => b[1] - a[1]).slice(0, n).map(([name, count]) => ({ name, count }));
     return Array.from(map.values()).map(st => {
       const t = Math.max(st.total, 1);
-      st.pos_pct = +(st.positive / t * 100).toFixed(1);
-      st.neg_pct = +(st.negative / t * 100).toFixed(1);
-      st.neu_pct = +(st.neutral / t * 100).toFixed(1);
-      st.topics = topN(st._dept, 3);
-      st.districts = topN(st._dist, 2);
-      st.hashtags = topN(st._tags, 3);
+      st.pos_pct = +(st.positive / t * 100).toFixed(1); st.neg_pct = +(st.negative / t * 100).toFixed(1); st.neu_pct = +(st.neutral / t * 100).toFixed(1);
+      st.topics = topN(st._dept, 3); st.districts = topN(st._dist, 2); st.hashtags = topN(st._tags, 3);
       return st;
     });
   }
 
   function renderHandles() {
-    const tbody = $("handlesBody");
-    const q = $("instantSearch").value.trim();
-    const sortBy = $("hSort").value;
-
-    let baseList;
-    if (q || activeKeywordFilter) {
-      const matchingX = allItems.filter(it =>
-        it.source === "X" &&
-        (!q || matchesText(it, q)) &&
-        (!activeKeywordFilter || matchesText(it, activeKeywordFilter))
-      );
-      baseList = computeHandlesFromTweets(matchingX);
-    } else {
-      baseList = (latestPayload && latestPayload.handles) ? [...latestPayload.handles] : [];
-    }
-
-    let list = baseList.filter(h => {
-      if (sentFilter === "negative" && !h.negative) return false;
-      if (sentFilter === "positive" && !h.positive) return false;
-      return true;
-    });
-
-    list.sort((a, b) => {
-      if (sortBy === "negative") return (b.negative - a.negative) || (b.total - a.total);
-      if (sortBy === "positive") return (b.positive - a.positive) || (b.total - a.total);
-      if (sortBy === "engagement") return ((b.likes + b.retweets) - (a.likes + a.retweets)) || (b.total - a.total);
-      return (b.total - a.total) || (b.negative - a.negative);
-    });
-
-    const totalTweets = list.reduce((s, h) => s + h.total, 0);
-    const topicLabel = q ? ` · Topic: "${q}"` : (activeKeywordFilter ? ` · Keyword: "${activeKeywordFilter}"` : "");
-    $("handlesSummary").textContent = `${list.length} handles · ${totalTweets} tweets${topicLabel} (${latestPayload ? latestPayload.active_date : ""})`;
+    const tbody = $("handlesBody"), q = $("instantSearch").value.trim(), sortBy = $("hSort").value;
+    let baseList = (q || activeKeywordFilter || allKeywordsActive)
+      ? computeHandlesFromTweets(allItems.filter(it => it.source === "X" && (!q || matchesText(it, q)) && matchesKeywordSelection(it)))
+      : ((latestPayload && latestPayload.handles) ? [...latestPayload.handles] : []);
+    let list = baseList.filter(h => (!sentFilter || h[sentFilter] > 0));
+    list.sort((a, b) => sortBy === "negative" ? (b.negative - a.negative) || (b.total - a.total)
+      : sortBy === "positive" ? (b.positive - a.positive) || (b.total - a.total)
+      : sortBy === "engagement" ? ((b.likes + b.retweets) - (a.likes + a.retweets)) || (b.total - a.total)
+      : (b.total - a.total) || (b.negative - a.negative));
+    $("handlesSummary").textContent = `${list.length} handles · ${list.reduce((s, h) => s + h.total, 0)} tweets`;
     $("postCount").textContent = list.length + " handles";
-    if (!list.length) { tbody.innerHTML = '<tr><td colspan="10" class="py-8 text-center text-slate-400">इस filter पर कोई handle नहीं मिला।</td></tr>'; return; }
-
+    if (!list.length) { tbody.innerHTML = '<tr><td colspan="10" class="py-8 text-center text-slate-400">कोई handle नहीं मिला।</td></tr>'; return; }
     tbody.innerHTML = list.map(h => {
       const topics = (h.topics || []).map(t => `<span class="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-200 border border-sky-500/30">${esc(t.name)} ×${t.count}</span>`).join(" ");
       const dists = (h.districts || []).map(t => `<span class="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-200 border border-amber-500/30">${esc(t.name)} ×${t.count}</span>`).join(" ");
@@ -861,8 +1262,7 @@
     let list = latestPayload.accounts.filter(a => {
       if (accSourceFilter === "X" && a.source !== "X") return false;
       if (accSourceFilter === "MEDIA" && a.source === "X") return false;
-      if (sentFilter === "negative" && !a.negative) return false;
-      if (sentFilter === "positive" && !a.positive) return false;
+      if (sentFilter && !a[sentFilter]) return false;
       if (q && !(a.author.toLowerCase().includes(q) || a.source.toLowerCase().includes(q))) return false;
       return true;
     });
@@ -888,39 +1288,16 @@
   function renderSearchHandlesSummary(matchingItems) {
     const box = $("searchHandlesBox");
     if (!matchingItems.length) { box.classList.add("hidden"); return; }
-
-    // Group matching posts by handle/account (X handles shown first)
     const map = new Map();
     matchingItems.forEach(it => {
-      const isX = it.source === "X";
-      const key = isX ? ("H:" + (it.handle || it.author)) : ("A:" + it.author);
-      let row = map.get(key);
-      if (!row) {
-        row = {
-          act: isX ? "handle" : "account",
-          val: isX ? (it.handle || it.author) : it.author,
-          label: isX ? (it.handle || it.author) : it.author,
-          source: it.source,
-          total: 0, pos: 0, neg: 0, neu: 0
-        };
-        map.set(key, row);
-      }
-      row.total++;
-      if (it.sentiment === "positive") row.pos++;
-      else if (it.sentiment === "negative") row.neg++;
-      else row.neu++;
+      const isX = it.source === "X", key = isX ? ("H:" + (it.handle || it.author)) : ("A:" + it.author);
+      let r = map.get(key);
+      if (!r) { r = { act: isX ? "handle" : "account", val: isX ? (it.handle || it.author) : it.author, label: isX ? (it.handle || it.author) : it.author, source: it.source, total: 0, pos: 0, neg: 0, neu: 0 }; map.set(key, r); }
+      r.total++; if (it.sentiment === "positive") r.pos++; else if (it.sentiment === "negative") r.neg++; else r.neu++;
     });
-
-    const rows = Array.from(map.values()).sort((a, b) => {
-      if (a.source === "X" && b.source !== "X") return -1;
-      if (b.source === "X" && a.source !== "X") return 1;
-      return (b.total - a.total) || (b.neg - a.neg);
-    });
-
-    const xHandles = rows.filter(r => r.source === "X").length;
-    const q = $("instantSearch").value.trim() || activeKeywordFilter || selectedDistrict || selectedDept || "Filter";
-    $("searchHandlesTitle").textContent = `"${q}" — ${rows.length} Matching Handles/Sources (${xHandles} X Handles, ${matchingItems.length} Posts)`;
-
+    const rows = Array.from(map.values()).sort((a, b) => (a.source === "X" && b.source !== "X") ? -1 : (b.source === "X" && a.source !== "X") ? 1 : (b.total - a.total) || (b.neg - a.neg));
+    const q = allKeywordsActive ? `All ${keywords.length} Filters` : ($("instantSearch").value.trim() || activeKeywordFilter || selectedDistrict || selectedDept || "Filter");
+    $("searchHandlesTitle").textContent = `"${q}" — ${rows.length} Matching Handles/Sources (${matchingItems.length} Posts)`;
     $("searchHandlesList").innerHTML = rows.slice(0, 30).map(r => {
       const active = (r.act === "handle" && selectedHandle === r.val) || (r.act === "account" && selectedAccount === r.val);
       const b = SOURCE_BADGES[r.source] || SOURCE_BADGES.NEWS;
@@ -930,32 +1307,28 @@
         <span class="text-white font-extrabold">${r.total}</span>
         ${r.pos ? `<span class="text-emerald-400 font-bold">+${r.pos}</span>` : ""}
         ${r.neg ? `<span class="text-red-400 font-bold">-${r.neg}</span>` : ""}
+        ${r.neu ? `<span class="text-slate-400">○${r.neu}</span>` : ""}
       </button>`;
     }).join("");
-
     box.classList.remove("hidden");
   }
 
   function showView(name) {
-    ["feed", "accountsView", "handlesView", "liveTvWall"].forEach(id => $(id).classList.toggle("hidden", id !== name));
+    ["feed", "accountsView", "handlesView", "leadersView", "liveTvWall"].forEach(id => $(id).classList.toggle("hidden", id !== name));
     if (name !== "feed") $("searchHandlesBox").classList.add("hidden");
   }
-
   function playTv(i) {
-    const s = ((latestPayload && latestPayload.live_tv) || [])[i];
-    const box = document.getElementById("tvbox" + i);
+    const s = ((latestPayload && latestPayload.live_tv) || [])[i], box = $("tvbox" + i);
     if (!s || !box || !/^https:\/\/www\.youtube\.com\//.test(s.embed_url)) return;
     box.innerHTML = `<iframe class="w-full h-full" src="${esc(s.embed_url)}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
   }
-
   function srcBadge(it) {
     const b = SOURCE_BADGES[it.source];
-    const label = b ? b.full : ((it.language || "").toUpperCase() + " NEWS");
-    const cls = b ? b.cls : SOURCE_BADGES.NEWS.cls;
-    return `<span class="px-2 py-0.5 rounded border font-bold ${cls}">${esc(label)}</span>`;
+    return `<span class="px-2 py-0.5 rounded border font-bold ${(b || SOURCE_BADGES.NEWS).cls}">${esc(b ? b.full : ((it.language || "").toUpperCase() + " NEWS"))}</span>`;
   }
 
   function renderFeed(newIdSet = new Set()) {
+    if (currentSource === "LEADERS") { showView("leadersView"); renderLeaders(); return; }
     if (currentSource === "ACCOUNTS") { showView("accountsView"); renderAccounts(); return; }
     if (currentSource === "HANDLES") { showView("handlesView"); renderHandles(); return; }
     if (currentSource === "LIVE_TV") {
@@ -966,20 +1339,17 @@
       if (sig !== tvSig) {
         tvSig = sig;
         $("liveTvWall").innerHTML = streams.map((s, i) => {
-          const canEmbed = !!s.embed_url;
           const open = `<a href="${esc(safeUrl(s.watch_url))}" target="_blank" rel="noopener noreferrer"`;
-          return `
-          <div class="glass rounded-xl overflow-hidden flex flex-col">
+          return `<div class="glass rounded-xl overflow-hidden flex flex-col">
             <div id="tvbox${i}" class="aspect-video bg-black flex items-center justify-center relative">
               ${s.thumb ? `<img src="${esc(s.thumb)}" class="absolute inset-0 w-full h-full object-cover opacity-60" alt="">` : ""}
-              ${canEmbed
-                ? `<button data-act="playtv" data-val="${i}" class="relative z-10 px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm">▶ चलाएँ</button>`
-                : `${open} class="relative z-10 px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm">YouTube पर देखें ↗</a>`}
+              ${s.embed_url ? `<button data-act="playtv" data-val="${i}" class="relative z-10 px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm">▶ चलाएँ</button>`
+                            : `${open} class="relative z-10 px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm">YouTube पर देखें ↗</a>`}
             </div>
             <div class="p-3 flex items-center justify-between gap-2">
-              <span class="text-[10px] font-bold px-2 py-0.5 rounded ${s.is_live ? "bg-rose-600 text-white" : "bg-slate-700 text-slate-300"}">${s.is_live ? "● LIVE" : "Latest Video"}</span>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded ${s.is_live ? "bg-rose-600 text-white" : "bg-slate-700 text-slate-300"}">${s.is_live ? "● LIVE" : "Latest"}</span>
               <span class="text-[11px] text-slate-400">${esc(s.source)}</span>
-              ${open} class="text-xs text-sky-400 font-semibold">YouTube पर खोलें ↗</a>
+              ${open} class="text-xs text-sky-400 font-semibold">YouTube ↗</a>
             </div>
           </div>`;
         }).join("");
@@ -988,28 +1358,28 @@
     }
 
     showView("feed");
-    const container = $("feed");
-    const q = $("instantSearch").value.trim();
+    const container = $("feed"), q = $("instantSearch").value.trim();
+    const hasFilter = Boolean(q || allKeywordsActive || activeKeywordFilter || selectedDistrict || selectedDept || selectedAccount || selectedHandle || selectedLeaderId || sentFilter);
 
-    // Main screen ("SEARCH") stays completely BLANK whenever no filter is applied
-    const hasFilter = Boolean(q || activeKeywordFilter || selectedDistrict || selectedDept || selectedAccount || selectedHandle || sentFilter);
     if (currentSource === "SEARCH" && !hasFilter) {
       $("searchHandlesBox").classList.add("hidden");
       $("postCount").textContent = "Blank";
-      lastFilteredItems = [];
-      feedSig = "BLANK";
-      container.innerHTML = `
-        <div class="col-span-full rounded-2xl border border-dashed border-slate-800/90 bg-[#080e1a]/60 py-24 px-6 text-center space-y-2">
-          <div class="text-sm font-semibold text-slate-400">Main Screen Blank है</div>
-          <p class="text-xs text-slate-500 max-w-md mx-auto">
-            ऊपर search में कोई भी नाम या विषय लिखें (जैसे <b class="text-sky-400">Bhajan Lal</b>, <b class="text-sky-400">RPSC</b>, <b class="text-sky-400">@handle</b>) — सभी matching handles और उनके posts यहाँ आ जाएँगे। Filter हटाते ही स्क्रीन फिर blank हो जाएगी।
-          </p>
-          <p class="text-[11px] text-emerald-400/80 pt-1">Normal Admin News और Live Feed देखने के लिए ऊपर <b>"All Admin &amp; Live"</b> tab खोलें।</p>
-        </div>`;
+      lastFilteredItems = []; feedSig = "BLANK";
+      container.innerHTML = `<div class="col-span-full rounded-2xl border border-dashed border-slate-700/80 bg-[#080f1f]/70 py-20 px-6 text-center space-y-3">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-500/15 border border-sky-500/30 text-sky-300 text-xs font-bold">CIU WATCH · CLEAN WORKSPACE</div>
+        <div class="text-sm font-bold text-slate-200">Main Screen तैयार है</div>
+        <p class="text-xs text-slate-400 max-w-lg mx-auto leading-relaxed">
+          ऊपर <b class="text-sky-400">All Filters</b> पर क्लिक करके सभी filters एक साथ लगाएँ, किसी एक keyword पर क्लिक करें, या ऊपर <b class="text-emerald-400">Positive / Negative / Neutral</b> टैब चुनें। दाईं तरफ़ <b class="text-orange-300">Internet Leader Buzz</b> बिना filter के भी लाइव चलता रहेगा।
+        </p>
+        <div class="flex flex-wrap justify-center gap-2 pt-2">
+          <button onclick="toggleAllKeywordsFilter()" class="px-3.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold">Apply All Filters</button>
+          <button onclick="setSource('ALL')" class="px-3.5 py-1.5 rounded-lg bg-emerald-600/25 border border-emerald-500/40 hover:bg-emerald-600/35 text-emerald-200 text-xs font-bold">Open All Live Feed</button>
+          <button onclick="setSource('LEADERS')" class="px-3.5 py-1.5 rounded-lg bg-indigo-500/25 border border-indigo-400/40 hover:bg-indigo-500/35 text-indigo-200 text-xs font-bold">👑 CMO &amp; Leaders Tracker</button>
+        </div>
+      </div>`;
       return;
     }
 
-    // Items matching base query/filters (before handle/account narrowing, so handle breakdown stays visible while clicking handles)
     const baseFiltered = allItems.filter(it => {
       if (currentSource === "X" && it.source !== "X") return false;
       if (currentSource === "NEWSPAPER" && it.source !== "NEWSPAPER") return false;
@@ -1021,148 +1391,121 @@
       if (sentFilter && it.sentiment !== sentFilter) return false;
       if (selectedDistrict && it.district !== selectedDistrict) return false;
       if (selectedDept && it.department !== selectedDept) return false;
-      if (activeKeywordFilter && !matchesText(it, activeKeywordFilter)) return false;
+      if (selectedLeaderId && !(it.leaders || []).includes(selectedLeaderId)) return false;
+      if (!matchesKeywordSelection(it)) return false;
       if (q && !matchesText(it, q)) return false;
       return true;
     });
 
-    // Show Matching Handles summary box when searching on Main screen (or when searching any topic)
-    if (currentSource === "SEARCH" || q || activeKeywordFilter) {
-      renderSearchHandlesSummary(baseFiltered);
-    } else {
-      $("searchHandlesBox").classList.add("hidden");
-    }
+    if (currentSource === "SEARCH" || q || activeKeywordFilter || allKeywordsActive) renderSearchHandlesSummary(baseFiltered);
+    else $("searchHandlesBox").classList.add("hidden");
 
-    const filtered = baseFiltered.filter(it => {
-      if (selectedAccount && it.author !== selectedAccount) return false;
-      if (selectedHandle && it.handle !== selectedHandle) return false;
-      return true;
-    });
-
+    const filtered = baseFiltered.filter(it => (!selectedAccount || it.author === selectedAccount) && (!selectedHandle || it.handle === selectedHandle));
     lastFilteredItems = filtered;
     $("postCount").textContent = filtered.length + " posts";
 
-    const sig = currentSource + "|" + filtered.map(i => i.id).join(",") + "|" + (activeKeywordFilter || "") + "|" + (selectedHandle || "") + "|" + (selectedAccount || "") + "|" + selectedDate + "|" + q;
+    const sig = currentSource + "|" + filtered.map(i => i.id + ":" + i.sentiment).join(",") + "|" + (allKeywordsActive ? "ALLKW" : (activeKeywordFilter || "")) + "|" + (selectedHandle || "") + "|" + (selectedAccount || "") + "|" + (selectedLeaderId || "") + "|" + selectedDate + "|" + q;
     if (sig === feedSig && newIdSet.size === 0) return;
     feedSig = sig;
 
-    if (!filtered.length) {
-      container.innerHTML = '<div class="col-span-full text-center py-12 text-slate-400 text-sm">इस date / filter पर कोई पोस्ट नहीं मिली।</div>';
-      return;
-    }
-    const y = window.scrollY;
+    if (!filtered.length) { container.innerHTML = '<div class="col-span-full text-center py-12 text-slate-400 text-sm">इस date / filter पर कोई पोस्ट नहीं मिली।</div>'; return; }
+
     container.innerHTML = filtered.map(it => {
       const isNew = newIdSet.has(it.id);
       const sent = it.sentiment === "negative" ? '<span class="px-2 py-0.5 rounded bg-red-600 text-white font-bold">NEGATIVE</span>'
-        : it.sentiment === "positive" ? '<span class="px-2 py-0.5 rounded bg-emerald-600/80 text-white font-bold">POSITIVE</span>' : "";
+        : it.sentiment === "positive" ? '<span class="px-2 py-0.5 rounded bg-emerald-600/90 text-white font-bold">POSITIVE</span>'
+        : '<span class="px-2 py-0.5 rounded bg-slate-700 text-slate-200 font-bold">NEUTRAL</span>';
       const nb = isNew ? '<span class="px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-extrabold animate-pulse">NEW</span>' : "";
-      const border = it.sentiment === "negative" ? "border-red-500/60" : it.sentiment === "positive" ? "border-emerald-500/50" : "border-slate-800";
+      const border = it.sentiment === "negative" ? "border-red-500/55" : it.sentiment === "positive" ? "border-emerald-500/50" : "border-slate-800";
       const eng = (it.source === "X" || it.source === "FACEBOOK" || it.source === "INSTAGRAM") ? `❤ ${it.likes} &nbsp; 🔁 ${it.retweets}` : esc(it.department);
       const del = it.manual ? `<button data-act="delmanual" data-val="${esc(it.id)}" class="ml-2 text-slate-500 hover:text-red-400" title="हटाएँ">🗑</button>` : "";
-      return `<article class="rounded-xl p-4 bg-[#0f172a] border ${border} hover:border-sky-500/50 transition flex flex-col justify-between ${isNew ? "new-flash" : ""}">
+      const trainTag = it.user_corrected ? (it.flagged_conflict ? '<span class="text-[9px] text-amber-300 font-bold">⚠ Override</span>' : '<span class="text-[9px] text-violet-300 font-bold">🧠 Learned</span>') : "";
+
+      const rBtn = (mode, label, activeCls) => {
+        const isOn = it.sentiment === mode;
+        return `<button data-act="reclass" data-id="${esc(it.id)}" data-val="${mode}" title="AI को suggest करें: ${mode}" class="px-1.5 py-0.5 rounded text-[9px] font-bold border transition ${isOn ? activeCls : "bg-slate-900 border-slate-700 text-slate-400 hover:text-white"}">${label}</button>`;
+      };
+
+      return `<article class="glass rounded-xl p-4 border ${border} hover:border-sky-500/60 transition flex flex-col justify-between ${isNew ? "new-flash" : ""}">
         <div>
           <div class="flex items-center justify-between gap-2 text-[10px] mb-2">
-            <div class="flex items-center gap-1 flex-wrap">${srcBadge(it)} ${sent} ${nb}<span class="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300">${esc(it.district)}</span></div>
+            <div class="flex items-center gap-1 flex-wrap">${srcBadge(it)} ${sent} ${nb} ${trainTag}<span class="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300">${esc(it.district)}</span></div>
             <span class="text-emerald-300 font-semibold whitespace-nowrap">${timeLabel(it)}</span>
           </div>
           <p class="text-xs font-semibold text-sky-300 mb-1 cursor-pointer hover:underline" data-act="${it.source === "X" ? "handle" : "account"}" data-val="${esc(it.source === "X" ? (it.handle || it.author) : it.author)}">${esc(it.author)}</p>
-          <p class="text-[13px] text-slate-100 leading-relaxed mb-3 break-words">${highlightText(it.text)}</p>
+          <p class="text-[13px] text-slate-100 leading-relaxed mb-2.5 break-words">${highlightText(it.text)}</p>
         </div>
-        <div class="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-800/80">
-          <span>${eng} · ${esc(it.date_label)} ${esc(it.time_str)}${del}</span>
-          ${it.url ? `<a href="${esc(safeUrl(it.url))}" target="_blank" rel="noopener noreferrer" class="text-sky-400 hover:underline font-semibold">Open ↗</a>` : ""}
+        <div class="space-y-1.5 pt-2 border-t border-slate-800/80">
+          <div class="flex items-center justify-between gap-2 text-[10px]">
+            <div class="flex items-center gap-1">
+              <span class="text-slate-500 mr-0.5">Suggest:</span>
+              ${rBtn("positive", "+Pos", "bg-emerald-600/30 border-emerald-500 text-emerald-200")}
+              ${rBtn("negative", "-Neg", "bg-red-600/30 border-red-500 text-red-200")}
+              ${rBtn("neutral", "○Neu", "bg-slate-600/50 border-slate-400 text-white")}
+            </div>
+            <span class="text-slate-500 truncate max-w-[145px]" title="${esc(it.sentiment_reason || "")}">${it.confidence || 0}% · ${esc(it.sentiment_reason || "")}</span>
+          </div>
+          <div class="flex items-center justify-between text-[11px] text-slate-400">
+            <span>${eng} · ${esc(it.date_label)} ${esc(it.time_str)}${del}</span>
+            ${it.url ? `<a href="${esc(safeUrl(it.url))}" target="_blank" rel="noopener noreferrer" class="text-sky-400 hover:underline font-semibold">Open ↗</a>` : ""}
+          </div>
         </div>
       </article>`;
     }).join("");
-    window.scrollTo(0, y);
   }
 
-  // ---------- modals ----------
+  // ---------- modals & exports ----------
   function closeModal(id) { $(id).classList.add("hidden"); }
   function openManualModal() { $("mErr").classList.add("hidden"); $("manualModal").classList.remove("hidden"); }
   async function submitManual() {
-    const err = $("mErr");
-    const when = $("mWhen").value ? $("mWhen").value.replace("T", " ") : "";
-    const body = {
-      platform: $("mPlatform").value, author: $("mAuthor").value.trim(), text: $("mText").value.trim(),
-      url: $("mUrl").value.trim(), posted_at: when, likes: parseInt($("mLikes").value || "0", 10) || 0
-    };
+    const err = $("mErr"), when = $("mWhen").value ? $("mWhen").value.replace("T", " ") : "";
+    const body = { platform: $("mPlatform").value, author: $("mAuthor").value.trim(), text: $("mText").value.trim(), url: $("mUrl").value.trim(), posted_at: when, likes: parseInt($("mLikes").value || "0", 10) || 0 };
     if (!body.author || !body.text) { err.textContent = "नाम और text दोनों ज़रूरी हैं।"; err.classList.remove("hidden"); return; }
-    try {
-      await api("/api/manual", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      ["mAuthor", "mText", "mUrl", "mWhen", "mLikes"].forEach(i => $(i).value = "");
-      closeModal("manualModal");
-      fetchFeed(true);
-    } catch (e) { err.textContent = "Save नहीं हुआ: " + e.message; err.classList.remove("hidden"); }
+    try { await api("/api/manual", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); ["mAuthor", "mText", "mUrl", "mWhen", "mLikes"].forEach(i => $(i).value = ""); closeModal("manualModal"); fetchFeed(true); }
+    catch (e) { err.textContent = "Save नहीं हुआ: " + e.message; err.classList.remove("hidden"); }
   }
-
   function openBriefModal() {
     if (!latestPayload) return;
-    const s = latestPayload.stats;
-    const topNeg = allItems.filter(i => i.sentiment === "negative").slice(0, 5);
-    const negHandles = (latestPayload.handles || []).filter(h => h.negative > 0).sort((a, b) => b.negative - a.negative).slice(0, 4);
-    let t = `📊 *CIU WATCH — DAILY MEDIA & X BRIEF (${latestPayload.active_date})*\n🕒 Updated: ${latestPayload.updated_at}\n🚨 Crisis Score: ${s.crisis_score}/100\n\n`;
-    t += `📈 *SENTIMENT (Total ${s.total} | X: ${s.x_count} | News: ${s.news_count} | FB/IG: ${s.fb_count + s.ig_count})*\n`;
-    t += `🔴 Negative: ${s.negative} (${s.negative_pct}%)\n🟢 Positive: ${s.positive} (${s.positive_pct}%)\n⚪ Neutral: ${s.neutral} (${s.neutral_pct}%)\n\n`;
-    if (negHandles.length) {
-      t += `👤 *TOP NEGATIVE HANDLES:*\n`;
-      negHandles.forEach((h, i) => { t += `${i + 1}. ${h.handle} — ${h.total} tweets (${h.negative} Neg / ${h.positive} Pos)\n`; });
-      t += `\n`;
-    }
+    const s = latestPayload.stats, topNeg = allItems.filter(i => i.sentiment === "negative").slice(0, 5);
+    const topLeaders = (latestPayload.leaders || []).filter(l => (l.total_buzz || l.x_total) > 0).slice(0, 5);
+    let t = `📊 *CIU WATCH — BJP RAJASTHAN BRIEF (${latestPayload.active_date})*\n🕒 Updated: ${latestPayload.updated_at}\n🚨 Crisis Score: ${s.crisis_score}/100\n\n`;
+    t += `📈 *SENTIMENT (Total ${s.total} | X: ${s.x_count} | News: ${s.news_count})*\n🔴 Negative: ${s.negative} (${s.negative_pct}%)\n🟢 Positive (BJP/Govt): ${s.positive} (${s.positive_pct}%)\n⚪ Neutral: ${s.neutral} (${s.neutral_pct}%)\n\n`;
+    if (topLeaders.length) { t += `👑 *INTERNET LEADER BUZZ:*\n`; topLeaders.forEach((l, i) => { t += `${i + 1}. ${l.name}: ${l.total_buzz || l.x_total} mentions (X: ${l.x_total}, +${l.total_positive}/-${l.total_negative}/○${l.total_neutral})\n`; }); t += `\n`; }
     t += `🚨 *TOP NEGATIVE ALERTS:*\n`;
     topNeg.forEach((n, i) => { t += `${i + 1}. [${n.source} | ${n.author}] ${n.text.slice(0, 140)}\n`; });
-    $("briefText").value = t;
-    $("briefModal").classList.remove("hidden");
+    $("briefText").value = t; $("briefModal").classList.remove("hidden");
   }
   function copyBrief() {
-    const ta = $("briefText");
-    ta.select();
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(ta.value).then(() => alert("WhatsApp Brief copy हो गया!"));
-    } else {
-      document.execCommand("copy");
-      alert("WhatsApp Brief copy हो गया!");
-    }
+    const ta = $("briefText"); ta.select();
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(ta.value).then(() => showToast("WhatsApp Brief copy हो गया!", "emerald"));
+    else { document.execCommand("copy"); showToast("WhatsApp Brief copy हो गया!", "emerald"); }
   }
-
-  // ---------- exports ----------
   function exportCSV() {
     if (!allItems.length) return;
-    const rows = [["Date", "Time (IST)", "Source", "Author", "Language", "Sentiment", "District", "Department", "Text", "Link"]];
-    allItems.forEach(i => rows.push([i.date_ist, i.time_str, i.source, i.author, i.language, i.sentiment, i.district, i.department, i.text, i.url]));
+    const rows = [["Date", "Time (IST)", "Source", "Author", "Language", "Sentiment", "Confidence", "District", "Department", "Text", "Link"]];
+    allItems.forEach(i => rows.push([i.date_ist, i.time_str, i.source, i.author, i.language, i.sentiment, i.confidence, i.district, i.department, i.text, i.url]));
     downloadCSV(`CIU_Watch_Feed_${(latestPayload && latestPayload.active_date) || "report"}.csv`, rows);
   }
   function exportFilteredCSV() {
     if (!lastFilteredItems.length) return;
-    const rows = [["Date", "Time (IST)", "Source", "Author", "Handle", "Language", "Sentiment", "District", "Department", "Text", "Link"]];
-    lastFilteredItems.forEach(i => rows.push([i.date_ist, i.time_str, i.source, i.author, i.handle || "", i.language, i.sentiment, i.district, i.department, i.text, i.url]));
-    const tag = ($("instantSearch").value.trim() || activeKeywordFilter || "filtered").replace(/\W+/g, "_").slice(0, 25);
-    downloadCSV(`CIU_Watch_${tag}_${(latestPayload && latestPayload.active_date) || "report"}.csv`, rows);
+    const rows = [["Date", "Time (IST)", "Source", "Author", "Handle", "Sentiment", "District", "Department", "Text", "Link"]];
+    lastFilteredItems.forEach(i => rows.push([i.date_ist, i.time_str, i.source, i.author, i.handle || "", i.sentiment, i.district, i.department, i.text, i.url]));
+    downloadCSV(`CIU_Watch_Filtered_${(latestPayload && latestPayload.active_date) || "report"}.csv`, rows);
   }
   function exportAccountsCSV() {
     if (!latestPayload || !latestPayload.accounts) return;
-    const rows = [["Account", "Source", "Total", "Positive", "Positive %", "Negative", "Negative %", "Neutral", "Stance", "Likes", "Retweets"]];
-    latestPayload.accounts.forEach(a => rows.push([a.author, a.source, a.total, a.positive, a.pos_pct, a.negative, a.neg_pct, a.neutral, a.stance, a.likes, a.retweets]));
+    const rows = [["Account", "Source", "Total", "Positive", "Pos %", "Negative", "Neg %", "Neutral", "Stance"]];
+    latestPayload.accounts.forEach(a => rows.push([a.author, a.source, a.total, a.positive, a.pos_pct, a.negative, a.neg_pct, a.neutral, a.stance]));
     downloadCSV(`CIU_Watch_Accounts_${latestPayload.active_date}.csv`, rows);
   }
   function exportHandlesCSV() {
     const q = $("instantSearch").value.trim();
-    let list;
-    if (q || activeKeywordFilter) {
-      const matchingX = allItems.filter(it => it.source === "X" && (!q || matchesText(it, q)) && (!activeKeywordFilter || matchesText(it, activeKeywordFilter)));
-      list = computeHandlesFromTweets(matchingX);
-    } else {
-      list = (latestPayload && latestPayload.handles) || [];
-    }
+    const list = (q || activeKeywordFilter || allKeywordsActive)
+      ? computeHandlesFromTweets(allItems.filter(it => it.source === "X" && (!q || matchesText(it, q)) && matchesKeywordSelection(it)))
+      : ((latestPayload && latestPayload.handles) || []);
     if (!list.length) return;
-    const rows = [["Handle", "Name", "Tweets", "Positive", "Positive %", "Negative", "Negative %", "Neutral", "Likes", "Retweets", "Top Topics", "Districts", "Hashtags", "Sabse teekha tweet", "Link"]];
-    list.forEach(h => rows.push([
-      h.handle, h.name, h.total, h.positive, h.pos_pct, h.negative, h.neg_pct, h.neutral, h.likes, h.retweets,
-      (h.topics || []).map(t => `${t.name} (${t.count})`).join("; "),
-      (h.districts || []).map(t => `${t.name} (${t.count})`).join("; "),
-      (h.hashtags || []).map(t => `${t.name} (${t.count})`).join("; "),
-      h.worst ? h.worst.text : "", h.worst ? h.worst.url : ""
-    ]));
+    const rows = [["Handle", "Name", "Tweets", "Positive", "Pos %", "Negative", "Neg %", "Neutral", "Likes", "Retweets"]];
+    list.forEach(h => rows.push([h.handle, h.name, h.total, h.positive, h.pos_pct, h.negative, h.neg_pct, h.neutral, h.likes, h.retweets]));
     downloadCSV(`CIU_Watch_Handles_${(latestPayload && latestPayload.active_date) || "report"}.csv`, rows);
   }
 
@@ -1172,15 +1515,8 @@
     if (!lastOkTs) return;
     const age = Math.floor((Date.now() - lastOkTs) / 1000);
     const stale = !selectedDate && !isPaused && scanInterval !== 0 && age > 120;
-    dot.className = "h-3 w-3 rounded-full " + (
-      selectedDate ? "bg-amber-400"
-      : isPaused ? "bg-amber-400"
-      : stale || failCount > 1 ? "bg-red-500"
-      : "bg-emerald-400 animate-pulse"
-    );
-    txt.textContent = isPaused
-      ? "Paused (आख़िरी sync: " + (age < 90 ? age + "s" : Math.floor(age / 60) + "m") + " पहले)"
-      : "आख़िरी सफल अपडेट: " + (age < 90 ? age + "s" : Math.floor(age / 60) + "m") + " पहले";
+    dot.className = "h-3 w-3 rounded-full ring-4 " + (selectedDate || isPaused ? "bg-amber-400 ring-amber-400/20" : stale || failCount > 1 ? "bg-red-500 ring-red-500/20" : "bg-emerald-400 ring-emerald-400/25 animate-pulse");
+    txt.textContent = (isPaused ? "Paused (last sync: " : "आख़िरी अपडेट: ") + (age < 90 ? age + "s" : Math.floor(age / 60) + "m") + (isPaused ? " पहले)" : " पहले");
     txt.className = stale ? "text-red-400 font-semibold" : (isPaused ? "text-amber-300 font-semibold" : "");
   }
 
@@ -1189,18 +1525,12 @@
     if (activeCtrl) { try { activeCtrl.abort(); } catch (e) {} }
     activeCtrl = new AbortController();
     const myCtrl = activeCtrl;
-    inFlight = true;
-    countdown = scanInterval || 30;
+    inFlight = true; countdown = scanInterval || 30;
     try {
       const dateParam = selectedDate ? "&date=" + encodeURIComponent(selectedDate) : "";
-      const data = await api(
-        `/api/feed?keywords=${encodeURIComponent(keywords.join(","))}&force=${force}${dateParam}`,
-        { signal: myCtrl.signal }
-      );
+      const data = await api(`/api/feed?keywords=${encodeURIComponent(keywords.join(","))}&force=${force}${dateParam}`, { signal: myCtrl.signal });
       if (myCtrl !== activeCtrl) return;
-      latestPayload = data;
-      lastOkTs = Date.now();
-      lastServerTime = data.server_time || (Date.now() / 1000);
+      latestPayload = data; lastOkTs = Date.now(); lastServerTime = data.server_time || (Date.now() / 1000);
       missedX = 0; missedMedia = 0; failCount = 0;
       $("connBox").classList.add("hidden");
       applyPayload(data);
@@ -1208,13 +1538,10 @@
       if (e.name === "AbortError" || myCtrl !== activeCtrl) return;
       if (e.message !== "401") {
         failCount++;
-        const box = $("connBox");
-        box.textContent = "सर्वर से जवाब नहीं आ रहा (" + e.message + "). Render free साइट सो गई हो सकती है — 30-50 सेकंड रुककर Scan Now दबाइए।";
-        box.classList.remove("hidden");
+        $("connBox").textContent = "सर्वर से जवाब नहीं आ रहा (" + e.message + "). 30-50 सेकंड रुककर Scan Now दबाइए।";
+        $("connBox").classList.remove("hidden");
       }
-    } finally {
-      if (myCtrl === activeCtrl) { inFlight = false; updateConn(); }
-    }
+    } finally { if (myCtrl === activeCtrl) { inFlight = false; updateConn(); } }
   }
 
   function applyPayload(data) {
@@ -1227,13 +1554,15 @@
     $("liveResetBtn").classList.toggle("hidden", !isArchive);
     $("intervalBox").classList.toggle("hidden", isArchive);
     if (isArchive) $("archiveDateText").textContent = "Archive Date: " + data.active_date;
-    $("lastUpdated").textContent = isArchive ? `Archive: ${data.active_date} (Updated ${data.updated_at})` : "Updated: " + data.updated_at;
+    $("lastUpdated").textContent = isArchive ? `Archive: ${data.active_date}` : "Updated: " + data.updated_at;
 
     $("kpiNeg").textContent = s.negative; $("kpiNegPct").textContent = s.negative_pct + "%";
     $("kpiPos").textContent = s.positive; $("kpiPosPct").textContent = s.positive_pct + "%";
-    $("kpiTotal").textContent = s.total;
-    $("kpiX").textContent = `${s.x_count} X · ${s.yt_count} YT · ${s.fb_count + s.ig_count} FB/IG`;
+    $("kpiNeu").textContent = s.neutral;  $("kpiNeuPct").textContent = s.neutral_pct + "%";
+    $("kpiTotal").textContent = s.total;  $("kpiX").textContent = `${s.x_count} X`;
+    $("tabPosCnt").textContent = s.positive; $("tabNegCnt").textContent = s.negative; $("tabNeuCnt").textContent = s.neutral;
     $("langSplit").textContent = `HI ${s.hindi_count} | EN ${s.english_count}`;
+    if (data.learning) $("brainBtn").textContent = `🧠 AI Brain (${data.learning.tokens})`;
 
     const xb = $("xBadge"), xe = $("xErrorBox");
     if (data.x_status === "live") {
@@ -1248,11 +1577,7 @@
     }
 
     const cb = $("crisisBadge"), cs = s.crisis_score;
-    const lvl = cs >= 60
-      ? ["HIGH", "bg-red-950/80 text-red-300 border-red-500"]
-      : cs >= 30
-      ? ["MED", "bg-amber-950/80 text-amber-300 border-amber-500"]
-      : ["SAFE", "bg-emerald-950/60 text-emerald-300 border-emerald-600/40"];
+    const lvl = cs >= 60 ? ["HIGH", "bg-red-950/80 text-red-300 border-red-500"] : cs >= 30 ? ["MED", "bg-amber-950/80 text-amber-300 border-amber-500"] : ["SAFE", "bg-emerald-950/60 text-emerald-300 border-emerald-600/40"];
     cb.textContent = `Crisis: ${cs}/100 (${lvl[0]})`;
     cb.className = "px-2.5 py-1 rounded-full border font-bold " + lvl[1];
 
@@ -1268,28 +1593,20 @@
 
     if (!firstLoad && !isArchive && newIds.size > 0) {
       playBeep(hasAlert);
-      if ("Notification" in window && Notification.permission === "granted" && newest) {
+      if ("Notification" in window && Notification.permission === "granted" && newest)
         new Notification(`CIU Watch — ${newest.source} (${newest.author})`, { body: newest.text.slice(0, 120) });
-      }
     }
     firstLoad = false;
   }
 
-  // ---------- start ----------
-  initIntervalUI();
-  updatePauseUI();
-  renderKeywords();
-  renderFeed();
+  // ---------- boot ----------
+  initIntervalUI(); updatePauseUI(); syncSentButtons(); renderKeywords(); applyUiPrefs(); renderFeed();
   fetchFeed(false);
 
   setInterval(() => {
     updateConn();
     if (selectedDate) return;
-    if (isPaused || scanInterval === 0) {
-      pulseTick++;
-      if (pulseTick >= 20) { pulseTick = 0; checkPausedPulse(); }
-      return;
-    }
+    if (isPaused || scanInterval === 0) { pulseTick++; if (pulseTick >= 20) { pulseTick = 0; checkPausedPulse(); } return; }
     countdown--;
     if (countdown <= 0) fetchFeed(false);
     const t = $("timer"); if (t) t.textContent = Math.max(countdown, 0);
