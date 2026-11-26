@@ -762,58 +762,80 @@ async def get_youtube(force: bool):
     return await swr("yt", 300, factory, force=force, min_gap=30)
 
 
+# Fixed Live TV resolver: /live -> /streams -> XML RSS live/latest video (NEVER broken live_stream?channel=)
 async def get_tv(force: bool):
     async def factory():
         yt_items = await get_youtube(False)
 
-        async def probe(vid: str):
-            try:
-                r = await HTTP.get(f"https://www.youtube.com/watch?v={vid}", headers=YT_LIVE_HEADERS, timeout=7)
-                t = r.text
-                live = bool(re.search(r'"isLiveNow"\s*:\s*true', t))
-                emb = bool(re.search(r'"playableInEmbed"\s*:\s*true', t))
-                return live, emb
-            except Exception:
-                return False, False
+        async def one(name: str, cid: str):
+            vid = None
+            is_live = False
 
-        async def one(name, cid):
-            vid, embeddable = None, False
-            cands = [i["video_id"] for i in sorted(yt_items, key=lambda x: x["ts"], reverse=True)
-                     if i.get("author") == name and i.get("video_id")][:6]
-            if cands:
-                results = await asyncio.gather(*(probe(v) for v in cands))
-                for v, (live, emb) in zip(cands, results):
-                    if live:
-                        vid, embeddable = v, emb
-                        break
+            # Method 1: Channel /live page canonical or isLive videoId
+            try:
+                r = await HTTP.get(f"https://www.youtube.com/channel/{cid}/live", headers=YT_LIVE_HEADERS, timeout=7)
+                m = re.search(r'<link rel="canonical" href="https://www\.youtube\.com/watch\?v=([A-Za-z0-9_-]{11})"', r.text)
+                if m:
+                    vid = m.group(1)
+                    is_live = True
+                else:
+                    m2 = re.search(r'"videoId":"([A-Za-z0-9_-]{11})"[^}]{0,300}"isLive(?:Now)?":true', r.text)
+                    if m2:
+                        vid = m2.group(1)
+                        is_live = True
+            except Exception:
+                pass
+
+            # Method 2: Channel /streams tab (handles multi-stream news channels cleanly)
             if not vid:
                 try:
-                    r = await HTTP.get(f"https://www.youtube.com/channel/{cid}/live",
-                                       headers=YT_LIVE_HEADERS, timeout=7)
-                    m = re.search(r'<link rel="canonical" href="https://www\.youtube\.com/watch\?v=([A-Za-z0-9_-]{11})"', r.text)
-                    if m:
-                        vid = m.group(1)
-                        _, embeddable = await probe(vid)
+                    r2 = await HTTP.get(f"https://www.youtube.com/channel/{cid}/streams", headers=YT_LIVE_HEADERS, timeout=7)
+                    m_live = re.search(r'"videoId":"([A-Za-z0-9_-]{11})".{0,1800}?"(?:style|overlayStyle)":"LIVE"', r2.text)
+                    if m_live:
+                        vid = m_live.group(1)
+                        is_live = True
+                    else:
+                        m_any = re.search(r'"videoId":"([A-Za-z0-9_-]{11})"', r2.text)
+                        if m_any:
+                            vid = m_any.group(1)
                 except Exception as e:
                     health_fail(f"TV {name}", e)
+
+            # Method 3: Guaranteed XML RSS fallback (prefers LIVE-titled stream, else latest breaking bulletin)
+            if not vid:
+                ch_vids = [
+                    it for it in sorted(yt_items, key=lambda x: x["ts"], reverse=True)
+                    if it.get("author") == name and len(it.get("video_id", "")) == 11
+                ]
+                for it in ch_vids:
+                    if re.search(r"\blive\b|लाइव", it.get("text", ""), re.I):
+                        vid = it["video_id"]
+                        is_live = True
+                        break
+                if not vid and ch_vids:
+                    vid = ch_vids[0]["video_id"]
+
             if vid:
                 health_ok(f"TV {name}", 1)
-            if vid and embeddable:
-                embed = f"https://www.youtube.com/embed/{vid}?autoplay=1&mute=1&rel=0"
-            elif vid:
-                embed = ""
-            else:
-                embed = f"https://www.youtube.com/embed/live_stream?channel={cid}&autoplay=1&mute=1"
+                return {
+                    "source": name,
+                    "is_live": is_live,
+                    "embed_url": f"https://www.youtube.com/embed/{vid}?autoplay=1&mute=1&rel=0",
+                    "thumb": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg",
+                    "watch_url": f"https://www.youtube.com/watch?v={vid}",
+                }
+
             return {
-                "source": name, "is_live": bool(vid), "embed_url": embed,
-                "thumb": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if vid else "",
-                "watch_url": f"https://www.youtube.com/watch?v={vid}" if vid
-                else f"https://www.youtube.com/channel/{cid}/live",
+                "source": name,
+                "is_live": False,
+                "embed_url": "",
+                "thumb": "",
+                "watch_url": f"https://www.youtube.com/channel/{cid}/live",
             }
 
         return list(await asyncio.gather(*(one(n, c) for n, c in YOUTUBE_CHANNELS)))
 
-    return await swr("tv", 180, factory, force=force, min_gap=60)
+    return await swr("tv", 300, factory, force=force, min_gap=45)
 
 
 class ManualPost(BaseModel):
