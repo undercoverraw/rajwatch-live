@@ -45,6 +45,7 @@ UPSTASH_URL = os.getenv("UPSTASH_REDIS_REST_URL", "").strip().rstrip("/")
 UPSTASH_TOKEN = os.getenv("UPSTASH_REDIS_REST_TOKEN", "").strip()
 STATE_KEY = "ciuwatch:state:v2"
 STATE_FILE = Path(tempfile.gettempdir()) / "ciuwatch_state_v2.json"
+BG_COLLECT_INTERVAL = max(45, int(os.getenv("BG_COLLECT_SECONDS", "60")))
 
 
 def parse_feed_env(name: str) -> List[Tuple[str, str]]:
@@ -309,6 +310,7 @@ def build_item(*, id_: str, source: str, author: str, text: str, url: str, ts: O
     item = {
         "id": id_, "source": source, "author": author, "handle": handle, "text": text,
         "url": safe_url(url), "ts": first_seen(id_) if approx else ts, "ts_approx": approx,
+        "ingested_at": time.time(),
         "likes": int(likes or 0), "retweets": int(retweets or 0),
     }
     if video_id:
@@ -345,8 +347,10 @@ def sanitize_keywords(raw: str) -> List[str]:
 
 HTTP: Optional[httpx.AsyncClient] = None
 LIVE_TWEET_STORE: Dict[str, Dict[str, Any]] = {}
+LIVE_MEDIA_STORE: Dict[str, Dict[str, Any]] = {}
 MANUAL_STORE: Dict[str, Dict[str, Any]] = {}
 DAILY_TRACKER: Dict[str, Any] = {"date": "", "items": {}}
+ACTIVE_KEYWORDS: List[str] = list(DEFAULT_KEYWORDS)
 CACHE: Dict[str, Dict[str, Any]] = {}
 LOCKS: Dict[str, asyncio.Lock] = {}
 BG_TASKS: set = set()
@@ -373,6 +377,45 @@ def health_fail(name: str, err: Any):
         "ok": False, "ts": time.time(), "last_ok": prev.get("last_ok", 0),
         "count": 0, "error": (str(err) or repr(err))[:140],
     }
+
+
+def record_media_items(items: List[Dict[str, Any]], now_ts: float):
+    cutoff = now_ts - 86400
+    changed = False
+    for it in items:
+        if it.get("ts", 0) < cutoff:
+            continue
+        old = LIVE_MEDIA_STORE.get(it["id"])
+        if old:
+            it["ingested_at"] = old.get("ingested_at", it.get("ingested_at", now_ts))
+        else:
+            changed = True
+        LIVE_MEDIA_STORE[it["id"]] = it
+    for mid in [k for k, v in LIVE_MEDIA_STORE.items() if v.get("ts", 0) < cutoff]:
+        LIVE_MEDIA_STORE.pop(mid, None)
+    if len(LIVE_MEDIA_STORE) > 400:
+        for mid in sorted(LIVE_MEDIA_STORE, key=lambda k: LIVE_MEDIA_STORE[k].get("ts", 0))[:len(LIVE_MEDIA_STORE) - 400]:
+            LIVE_MEDIA_STORE.pop(mid, None)
+    if changed:
+        mark_dirty()
+
+
+def record_daily_tracker(items: List[Dict[str, Any]], today_str: str):
+    if DAILY_TRACKER["date"] != today_str:
+        DAILY_TRACKER["date"], DAILY_TRACKER["items"] = today_str, {}
+        mark_dirty()
+    changed = False
+    for it in items:
+        if it.get("date_ist") == today_str:
+            rec = {"hour": it["hour_ist"], "sentiment": it["sentiment"], "source": it["source"]}
+            if DAILY_TRACKER["items"].get(it["id"]) != rec:
+                DAILY_TRACKER["items"][it["id"]] = rec
+                changed = True
+    if len(DAILY_TRACKER["items"]) > 1800:
+        for k in list(DAILY_TRACKER["items"])[:300]:
+            DAILY_TRACKER["items"].pop(k, None)
+    if changed:
+        mark_dirty()
 
 
 async def _kv_get() -> Optional[str]:
@@ -411,11 +454,15 @@ async def load_state():
     try:
         data = json.loads(raw)
         LIVE_TWEET_STORE.update(data.get("tweets") or {})
+        LIVE_MEDIA_STORE.update(data.get("media") or {})
         MANUAL_STORE.update(data.get("manual") or {})
         d = data.get("daily") or {}
         DAILY_TRACKER["date"] = d.get("date", "")
         DAILY_TRACKER["items"] = d.get("items", {})
-        log.info("State loaded: %d tweets, %d manual", len(LIVE_TWEET_STORE), len(MANUAL_STORE))
+        if isinstance(data.get("keywords"), list) and data["keywords"]:
+            ACTIVE_KEYWORDS[:] = data["keywords"][:10]
+        log.info("State loaded: %d tweets, %d media, %d manual",
+                 len(LIVE_TWEET_STORE), len(LIVE_MEDIA_STORE), len(MANUAL_STORE))
     except Exception as e:
         log.warning("State load fail: %s", e)
 
@@ -426,12 +473,22 @@ async def save_state(force: bool = False):
         return
     _dirty = False
     tweets = dict(LIVE_TWEET_STORE)
+    media = dict(LIVE_MEDIA_STORE)
     while True:
-        s = json.dumps({"tweets": tweets, "manual": MANUAL_STORE, "daily": DAILY_TRACKER}, ensure_ascii=False)
-        if len(s) < 900_000 or not tweets:
+        s = json.dumps({
+            "tweets": tweets, "media": media, "manual": MANUAL_STORE,
+            "daily": DAILY_TRACKER, "keywords": ACTIVE_KEYWORDS,
+        }, ensure_ascii=False)
+        if len(s) < 900_000 or (not tweets and not media):
             break
-        for k in sorted(tweets, key=lambda x: tweets[x].get("ts", 0))[:100]:
-            tweets.pop(k, None)
+        if len(media) > 150:
+            for k in sorted(media, key=lambda x: media[x].get("ts", 0))[:80]:
+                media.pop(k, None)
+        elif tweets:
+            for k in sorted(tweets, key=lambda x: tweets[x].get("ts", 0))[:100]:
+                tweets.pop(k, None)
+        else:
+            break
     await _kv_set(s)
 
 
@@ -444,6 +501,39 @@ async def autosave_loop():
             log.warning("autosave: %s", e)
 
 
+async def background_collector_loop():
+    """Server-side background collector: kisi user ke pause karne par bhi tweets, news & graph update hote rahenge."""
+    await asyncio.sleep(8)
+    while True:
+        try:
+            kw = list(ACTIVE_KEYWORDS) or list(DEFAULT_KEYWORDS)
+            now_ist = datetime.now(IST)
+            now_ts = now_ist.timestamp()
+            today_str = now_ist.strftime("%Y-%m-%d")
+            x_res, news_en, news_hi, papers, yt_items, extra = await asyncio.gather(
+                get_x_live(kw, False),
+                get_news(kw, "en", None, False),
+                get_news(kw, "hi", None, False),
+                get_papers(False), get_youtube(False), get_extra(False),
+                return_exceptions=True,
+            )
+            collected: List[Dict[str, Any]] = []
+            if isinstance(x_res, tuple) and isinstance(x_res[0], list):
+                collected.extend(x_res[0])
+            media_batch: List[Dict[str, Any]] = []
+            for res in (news_en, news_hi, papers, yt_items, extra):
+                if isinstance(res, list):
+                    media_batch.extend(res)
+            if media_batch:
+                record_media_items(media_batch, now_ts)
+                collected.extend(media_batch)
+            if collected:
+                record_daily_tracker(collected, today_str)
+        except Exception as e:
+            log.warning("bg collector: %s", e)
+        await asyncio.sleep(BG_COLLECT_INTERVAL)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global HTTP
@@ -451,9 +541,11 @@ async def lifespan(app: FastAPI):
     await load_state()
     if not ACCESS_KEY:
         log.warning("CIU_ACCESS_KEY set nahi hai - API sabke liye khuli hai!")
-    task = asyncio.create_task(autosave_loop())
+    save_task = asyncio.create_task(autosave_loop())
+    collect_task = asyncio.create_task(background_collector_loop())
     yield
-    task.cancel()
+    save_task.cancel()
+    collect_task.cancel()
     await save_state(force=True)
     await HTTP.aclose()
 
@@ -605,6 +697,7 @@ async def get_x_live(kw: List[str], force: bool):
                 old = LIVE_TWEET_STORE.get(tw["id"])
                 if old:
                     tw["kws"] = sorted(set(old.get("kws", [])) | set(tw["kws"]))
+                    tw["ingested_at"] = old.get("ingested_at", tw["ingested_at"])
                 LIVE_TWEET_STORE[tw["id"]] = tw
             mark_dirty()
             health_ok("X", len(items))
@@ -762,7 +855,6 @@ async def get_youtube(force: bool):
     return await swr("yt", 300, factory, force=force, min_gap=30)
 
 
-# Fixed Live TV resolver: /live -> /streams -> XML RSS live/latest video (NEVER broken live_stream?channel=)
 async def get_tv(force: bool):
     async def factory():
         yt_items = await get_youtube(False)
@@ -771,7 +863,6 @@ async def get_tv(force: bool):
             vid = None
             is_live = False
 
-            # Method 1: Channel /live page canonical or isLive videoId
             try:
                 r = await HTTP.get(f"https://www.youtube.com/channel/{cid}/live", headers=YT_LIVE_HEADERS, timeout=7)
                 m = re.search(r'<link rel="canonical" href="https://www\.youtube\.com/watch\?v=([A-Za-z0-9_-]{11})"', r.text)
@@ -786,7 +877,6 @@ async def get_tv(force: bool):
             except Exception:
                 pass
 
-            # Method 2: Channel /streams tab (handles multi-stream news channels cleanly)
             if not vid:
                 try:
                     r2 = await HTTP.get(f"https://www.youtube.com/channel/{cid}/streams", headers=YT_LIVE_HEADERS, timeout=7)
@@ -801,7 +891,6 @@ async def get_tv(force: bool):
                 except Exception as e:
                     health_fail(f"TV {name}", e)
 
-            # Method 3: Guaranteed XML RSS fallback (prefers LIVE-titled stream, else latest breaking bulletin)
             if not vid:
                 ch_vids = [
                     it for it in sorted(yt_items, key=lambda x: x["ts"], reverse=True)
@@ -872,6 +961,7 @@ async def add_manual(p: ManualPost):
     if len(MANUAL_STORE) > 300:
         for k in sorted(MANUAL_STORE, key=lambda x: MANUAL_STORE[x]["ts"])[:50]:
             MANUAL_STORE.pop(k, None)
+    record_daily_tracker([item], datetime.now(IST).strftime("%Y-%m-%d"))
     mark_dirty()
     return item
 
@@ -903,6 +993,28 @@ async def check():
     return {"ok": True}
 
 
+@app.get("/api/pulse", dependencies=[Depends(require_key)])
+async def pulse(
+    since: float = Query(default=0.0),
+    keywords: str = Query(default=",".join(DEFAULT_KEYWORDS)),
+):
+    """Paused user ke liye lightweight count check: screen disturb kiye bina batata hai kitne naye tweets/news aa chuke hain."""
+    now_ts = time.time()
+    kw_list = sanitize_keywords(keywords) or DEFAULT_KEYWORDS
+    x_items = stored_tweets_for(kw_list, now_ts)
+    new_x = sum(1 for it in x_items if it.get("ingested_at", it.get("ts", 0)) > since)
+    new_media = sum(
+        1 for it in list(LIVE_MEDIA_STORE.values()) + list(MANUAL_STORE.values())
+        if it.get("ingested_at", it.get("ts", 0)) > since and it.get("ts", 0) >= (now_ts - 86400)
+    )
+    return {
+        "server_time": now_ts,
+        "new_x": new_x,
+        "new_media": new_media,
+        "new_total": new_x + new_media,
+    }
+
+
 def crisis_score(items: List[Dict[str, Any]], now_ts: float, is_archive: bool) -> int:
     pool = items if is_archive else [i for i in items if now_ts - i["ts"] <= 10800]
     if len(pool) < 3:
@@ -926,6 +1038,9 @@ async def api_feed(
     active_date = date_window[0] if is_archive else today_str
     cutoff = now_ts - 86400
 
+    if not is_archive and kw_list:
+        ACTIVE_KEYWORDS[:] = kw_list[:10]
+
     if is_archive:
         x_res, news_en, news_hi, live_tv = await asyncio.gather(
             get_x_archive(kw_list, force, date_window),
@@ -935,6 +1050,7 @@ async def api_feed(
         )
         papers, yt_items, extra = [], [], []
         manual = [m for m in MANUAL_STORE.values() if m["date_ist"] == active_date]
+        media_pool = news_hi + news_en + manual
     else:
         x_res, news_en, news_hi, papers, yt_items, extra, live_tv = await asyncio.gather(
             get_x_live(kw_list, force),
@@ -942,7 +1058,10 @@ async def api_feed(
             get_news(kw_list, "hi", None, force),
             get_papers(force), get_youtube(force), get_extra(force), get_tv(force),
         )
+        fresh_media = news_hi + news_en + papers + yt_items + extra
+        record_media_items(fresh_media, now_ts)
         manual = [m for m in MANUAL_STORE.values() if m["ts"] >= cutoff]
+        media_pool = list(LIVE_MEDIA_STORE.values()) + fresh_media + manual
 
     x_items, x_status, x_error = x_res
 
@@ -954,7 +1073,7 @@ async def api_feed(
         deduped_x.append(tw)
 
     deduped_media, seen_media = [], set()
-    for it in sorted(news_hi + news_en + papers + yt_items + extra + manual, key=lambda x: x["ts"], reverse=True):
+    for it in sorted(media_pool, key=lambda x: x["ts"], reverse=True):
         if not is_archive and it["ts"] < cutoff:
             continue
         norm = re.sub(r"[^a-zA-Z0-9\u0900-\u097F]+", "", it["text"].lower())[:50]
@@ -964,7 +1083,7 @@ async def api_feed(
         seen_media.add(k)
         deduped_media.append(it)
 
-    deduped = sorted(deduped_x[:150] + deduped_media[:170], key=lambda x: x["ts"], reverse=True)
+    deduped = sorted(deduped_x[:180] + deduped_media[:200], key=lambda x: x["ts"], reverse=True)
 
     hours = list(range(24)) if is_archive else list(range(now_ist.hour + 1))
     mk = lambda: {h: 0 for h in hours}  # noqa: E731
@@ -984,17 +1103,7 @@ async def api_feed(
         for it in deduped:
             bump(it["hour_ist"], it["sentiment"], it["source"])
     else:
-        if DAILY_TRACKER["date"] != today_str:
-            DAILY_TRACKER["date"], DAILY_TRACKER["items"] = today_str, {}
-        for it in deduped:
-            if it["date_ist"] == today_str:
-                DAILY_TRACKER["items"][it["id"]] = {
-                    "hour": it["hour_ist"], "sentiment": it["sentiment"], "source": it["source"]
-                }
-        if len(DAILY_TRACKER["items"]) > 1500:
-            for k in list(DAILY_TRACKER["items"])[:300]:
-                DAILY_TRACKER["items"].pop(k, None)
-        mark_dirty()
+        record_daily_tracker(deduped, today_str)
         for rec in DAILY_TRACKER["items"].values():
             bump(rec.get("hour", 0), rec.get("sentiment", "neutral"), rec.get("source", ""))
 
