@@ -62,6 +62,8 @@
           <span id="timerPill" class="text-slate-200 text-[11px] pl-1.5 border-l border-slate-700"></span>
         </div>
 
+        <button id="pauseBtn" onclick="togglePause()" class="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold">⏸ Pause</button>
+
         <span id="xBadge" class="px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">Connecting...</span>
         <span id="crisisBadge" class="px-2.5 py-1 rounded-full bg-emerald-950/60 text-emerald-300 border border-emerald-600/40 font-bold">Crisis: 0/100</span>
 
@@ -70,7 +72,7 @@
         <button onclick="openManualModal()" class="px-2.5 py-1.5 rounded-lg bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-400/50 font-semibold">+ FB/IG जोड़ें</button>
         <button onclick="openBriefModal()" class="px-2.5 py-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-400/50 font-semibold">WhatsApp Brief</button>
         <button onclick="exportCSV()" class="px-2.5 py-1.5 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-400/50 font-semibold">Excel</button>
-        <button onclick="fetchFeed(true)" class="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-semibold">Scan Now</button>
+        <button onclick="manualScanNow()" class="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-semibold">Scan Now</button>
       </div>
     </div>
 
@@ -89,6 +91,13 @@
       <span>📅 <b id="archiveDateText">Back-Date Mode</b> — इस दिन के tweets और news दिख रहे हैं (auto-refresh बंद है)।</span>
       <button onclick="resetToLive()" class="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold">Return to Live Feed ↗</button>
     </div>
+
+    <!-- PAUSED CATCH-UP BANNER (Per-user only, server keeps collecting in background) -->
+    <div id="pausedBanner" class="hidden mb-3 px-4 py-2.5 rounded-xl bg-amber-500/15 border border-amber-400/50 text-amber-200 text-xs flex flex-wrap items-center justify-between gap-2">
+      <span id="pausedBannerText">⏸ स्क्रीन Paused है (बाक़ी users का लाइव चल रहा है)। Resume करते ही पीछे छूटे सभी tweets/news और graph अपडेट हो जाएँगे।</span>
+      <button onclick="resumeNow()" class="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold">▶ Resume &amp; Load Missed</button>
+    </div>
+
     <div id="connBox" class="hidden mb-3 p-3 rounded-xl bg-red-500/10 border border-red-500/40 text-red-200 text-xs"></div>
     <div id="xErrorBox" class="hidden mb-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/40 text-amber-200 text-xs"></div>
 
@@ -96,7 +105,8 @@
       <div class="lg:col-span-8 space-y-3">
         <div class="glass rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2">
           <div class="flex flex-wrap gap-1.5 text-xs" id="srcBar">
-            <button data-src="ALL" data-off="bg-slate-800 text-slate-300" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-sky-600 text-white">All Live</button>
+            <button data-src="SEARCH" data-off="bg-slate-800 text-slate-200 border border-slate-700" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-sky-600 text-white">🔍 Main (Filter)</button>
+            <button data-src="ALL" data-off="bg-emerald-950/70 border border-emerald-600/40 text-emerald-200" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-emerald-950/70 border border-emerald-600/40 text-emerald-200">All Admin &amp; Live</button>
             <button data-src="X" data-off="bg-slate-800 text-slate-300" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-slate-800 text-slate-300">X (Twitter)</button>
             <button data-src="HANDLES" data-off="bg-sky-500/20 border border-sky-400/50 text-sky-200" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-sky-500/20 border border-sky-400/50 text-sky-200">Handle Analysis</button>
             <button data-src="ACCOUNTS" data-off="bg-amber-500/20 border border-amber-400/50 text-amber-200" class="src-btn px-2.5 py-1.5 rounded-lg font-semibold bg-amber-500/20 border border-amber-400/50 text-amber-200">Accounts Tracker</button>
@@ -110,15 +120,30 @@
             <button id="negOnlyBtn" onclick="toggleSentFilter('negative')" class="px-2.5 py-1.5 rounded-lg bg-red-950/60 border border-red-700/50 text-red-300">Only Negative</button>
             <button id="posOnlyBtn" onclick="toggleSentFilter('positive')" class="px-2.5 py-1.5 rounded-lg bg-emerald-950/60 border border-emerald-700/50 text-emerald-300">Only Positive</button>
           </div>
-          <div class="flex items-center gap-2">
-            <input id="instantSearch" oninput="renderFeed()" type="text" placeholder="Filter posts / @handle..." class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white w-44 focus:outline-none focus:border-sky-500" />
-            <span id="postCount" class="text-xs text-slate-400 whitespace-nowrap">0 posts</span>
+          <div class="flex items-center gap-1.5 w-full sm:w-auto">
+            <div class="relative flex-1 sm:w-56">
+              <input id="instantSearch" oninput="onSearchInput()" type="text" placeholder="Search topic / Bhajan Lal / @handle..." class="bg-slate-900 border border-sky-500/50 rounded-lg pl-2.5 pr-7 py-1.5 text-xs text-white w-full focus:outline-none focus:border-sky-400" />
+              <button id="clearSearchBtn" onclick="clearSearchBox()" title="Filter हटाएँ" class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-amber-300 text-xs font-bold">✕</button>
+            </div>
+            <span id="postCount" class="text-xs text-slate-400 whitespace-nowrap">Blank</span>
           </div>
         </div>
 
         <div id="subFilterBar" class="hidden flex items-center justify-between bg-sky-950/40 border border-sky-500/30 rounded-lg px-3 py-1.5 text-xs text-sky-200">
           <span id="subFilterText"></span>
-          <button onclick="clearSubFilters()" class="text-amber-300 font-bold hover:underline">Clear ✕</button>
+          <button onclick="clearAllFilters()" class="text-amber-300 font-bold hover:underline">Clear All ✕</button>
+        </div>
+
+        <!-- DYNAMIC MATCHING HANDLES BREAKDOWN (Shows automatically when filtering on Main/Search screen) -->
+        <div id="searchHandlesBox" class="hidden glass rounded-xl p-3 space-y-2 border-sky-500/40">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 id="searchHandlesTitle" class="text-xs font-bold text-sky-300 uppercase tracking-wide">Matching Handles Breakdown</h3>
+              <p class="text-[10px] text-slate-400">किसी handle पर click करें ताकि सिर्फ़ उसी के matching posts दिखें</p>
+            </div>
+            <button onclick="exportFilteredCSV()" class="px-2.5 py-1 rounded-lg bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 font-semibold text-[11px]">Export Filtered Excel</button>
+          </div>
+          <div id="searchHandlesList" class="flex flex-wrap gap-1.5"></div>
         </div>
 
         <!-- HANDLE ANALYSIS -->
@@ -190,9 +215,7 @@
         </div>
 
         <div id="liveTvWall" class="hidden grid grid-cols-1 md:grid-cols-2 gap-3"></div>
-        <div id="feed" class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div class="col-span-full text-center py-12 text-slate-400 text-sm">Loading live CIU Watch feeds...</div>
-        </div>
+        <div id="feed" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
       </div>
 
       <aside class="lg:col-span-4 lg:sticky lg:top-28 space-y-3">
@@ -299,15 +322,18 @@
   let keywords = JSON.parse(localStorage.getItem("rajwatch_kw") || "null") || [...DEFAULT_KEYWORDS];
   let scanInterval = parseInt(localStorage.getItem("ciuwatch_interval") || "30", 10);
   if (![0, 30, 60, 120, 300].includes(scanInterval)) scanInterval = 30;
+  let lastActiveInterval = scanInterval > 0 ? scanInterval : 30;
   let countdown = scanInterval || 30;
+  let isPaused = (scanInterval === 0);
 
-  let activeKeywordFilter = null, currentSource = "ALL", accSourceFilter = "ALL", graphScope = "ALL";
-  let sentFilter = null, selectedDistrict = null, selectedDept = null, selectedAccount = null, selectedHandle = null;
-  let selectedDate = "", soundOn = true, allItems = [], latestPayload = null;
+  // Main screen defaults to "SEARCH" (blank until user filters; normal admin news runs on "ALL" & other tabs)
+  let currentSource = "SEARCH", accSourceFilter = "ALL", graphScope = "ALL";
+  let activeKeywordFilter = null, sentFilter = null, selectedDistrict = null, selectedDept = null, selectedAccount = null, selectedHandle = null;
+  let selectedDate = "", soundOn = true, allItems = [], lastFilteredItems = [], latestPayload = null;
   let seenIds = new Set(), firstLoad = true, hourlyChartObj = null, donutChartObj = null;
-  let inFlight = false, activeCtrl = null, lastOkTs = 0, failCount = 0, feedSig = "", tvSig = "", audioCtx = null;
+  let inFlight = false, activeCtrl = null, lastOkTs = 0, lastServerTime = 0, failCount = 0, feedSig = "", tvSig = "", audioCtx = null;
+  let missedX = 0, missedMedia = 0, pulseTick = 0;
 
-  // Explicit badge classes so Tailwind CDN always renders all colors reliably
   const SOURCE_BADGES = {
     X:         { short: "X",     full: "X LIVE",    cls: "bg-sky-500/20 text-sky-300 border-sky-500/30" },
     YOUTUBE:   { short: "YT",    full: "YOUTUBE",   cls: "bg-red-500/20 text-red-300 border-red-500/30" },
@@ -345,6 +371,22 @@
     if (selectedDate) return esc(it.date_label + ", " + it.time_str);
     if (it.ts_approx) return "समय अज्ञात";
     return `<span data-ago="${it.ts}">${timeAgo(it.ts)}</span>`;
+  }
+
+  // Space-insensitive smart matching: "bhajan lal" matches "Bhajanlal", "Bhajan Lal", "@BhajanlalBjp" etc.
+  function matchesText(it, rawQ) {
+    const q = (rawQ || "").trim().toLowerCase();
+    if (!q) return true;
+    const hay = (
+      (it.text || "") + " " + (it.author || "") + " " + (it.handle || "") + " " +
+      (it.district || "") + " " + (it.department || "")
+    ).toLowerCase();
+    if (hay.includes(q)) return true;
+    const qCompact = q.replace(/\s+/g, "");
+    if (qCompact.length >= 3 && hay.replace(/\s+/g, "").includes(qCompact)) return true;
+    const words = q.split(/\s+/).filter(w => w.length >= 2);
+    if (words.length > 1 && words.every(w => hay.includes(w))) return true;
+    return false;
   }
 
   // ---------- auth / api ----------
@@ -408,36 +450,138 @@
     });
   }
 
-  // ---------- interval / date ----------
+  // ---------- pause / resume / interval / date ----------
+  function updatePauseUI() {
+    const btn = $("pauseBtn");
+    const banner = $("pausedBanner");
+    const totalMissed = missedX + missedMedia;
+    if (selectedDate) {
+      btn.classList.add("hidden");
+      banner.classList.add("hidden");
+      return;
+    }
+    btn.classList.remove("hidden");
+    if (isPaused) {
+      btn.textContent = totalMissed > 0 ? `▶ Resume (+${totalMissed} new)` : "▶ Resume";
+      btn.className = "px-2.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold animate-pulse";
+      banner.classList.remove("hidden");
+      $("pausedBannerText").textContent = totalMissed > 0
+        ? `⏸ स्क्रीन Paused है (बाक़ी users का लाइव चल रहा है)। पीछे ${missedX} नए tweets और ${missedMedia} news जमा हो चुके हैं — Resume दबाते ही सब आ जाएगा और graph बढ़ जाएगा।`
+        : "⏸ स्क्रीन Paused है (बाक़ी users का लाइव चल रहा है)। Background में server डेटा इकट्ठा कर रहा है — Resume दबाते ही छूटे हुए tweets/news और graph अपडेट हो जाएँगे।";
+    } else {
+      btn.textContent = "⏸ Pause";
+      btn.className = "px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold";
+      banner.classList.add("hidden");
+    }
+    initIntervalUI();
+    updateConn();
+  }
+
   function initIntervalUI() {
     $("intervalSelect").value = String(scanInterval);
-    $("timerPill").innerHTML = scanInterval === 0
+    $("timerPill").innerHTML = (isPaused || scanInterval === 0)
       ? '<span class="text-amber-300 font-bold">Paused</span>'
       : `<b id="timer">${countdown}</b>s`;
   }
+
   function changeInterval() {
     scanInterval = parseInt($("intervalSelect").value, 10);
     localStorage.setItem("ciuwatch_interval", String(scanInterval));
-    countdown = scanInterval || 30;
-    initIntervalUI();
+    if (scanInterval === 0) {
+      isPaused = true;
+      pulseTick = 0;
+    } else {
+      lastActiveInterval = scanInterval;
+      const wasPaused = isPaused;
+      isPaused = false;
+      countdown = scanInterval;
+      missedX = 0; missedMedia = 0;
+      if (wasPaused) fetchFeed(true);
+    }
+    updatePauseUI();
   }
+
+  function togglePause() {
+    if (isPaused) resumeNow();
+    else {
+      isPaused = true;
+      pulseTick = 0;
+      updatePauseUI();
+    }
+  }
+
+  function resumeNow() {
+    isPaused = false;
+    if (scanInterval === 0) {
+      scanInterval = lastActiveInterval || 30;
+      localStorage.setItem("ciuwatch_interval", String(scanInterval));
+    }
+    countdown = scanInterval;
+    missedX = 0; missedMedia = 0;
+    updatePauseUI();
+    fetchFeed(true);
+  }
+
+  function manualScanNow() {
+    missedX = 0; missedMedia = 0;
+    if (isPaused) updatePauseUI();
+    fetchFeed(true);
+  }
+
+  async function checkPausedPulse() {
+    if (!isPaused || selectedDate || !lastServerTime) return;
+    try {
+      const p = await api(`/api/pulse?since=${encodeURIComponent(lastServerTime)}&keywords=${encodeURIComponent(keywords.join(","))}`);
+      missedX = p.new_x || 0;
+      missedMedia = p.new_media || 0;
+      updatePauseUI();
+    } catch (e) {}
+  }
+
   function onDateChange() {
     const val = $("datePicker").value;
     const today = latestPayload && latestPayload.today_date ? latestPayload.today_date : "";
     selectedDate = (val && val !== today) ? val : "";
-    resetFilters(); firstLoad = true; seenIds.clear(); feedSig = "";
+    resetSubFiltersOnly(); firstLoad = true; seenIds.clear(); feedSig = "";
+    updatePauseUI();
     fetchFeed(true);
   }
   function resetToLive() {
     selectedDate = "";
     $("datePicker").value = (latestPayload && latestPayload.today_date) || "";
-    resetFilters(); firstLoad = true; seenIds.clear(); feedSig = "";
+    resetSubFiltersOnly(); firstLoad = true; seenIds.clear(); feedSig = "";
     countdown = scanInterval || 30;
+    updatePauseUI();
     fetchFeed(true);
   }
-  function resetFilters() { selectedAccount = null; selectedHandle = null; selectedDistrict = null; selectedDept = null; }
+  function resetSubFiltersOnly() { selectedAccount = null; selectedHandle = null; selectedDistrict = null; selectedDept = null; }
 
-  // ---------- keywords ----------
+  // ---------- search & keywords ----------
+  function onSearchInput() {
+    const hasQ = $("instantSearch").value.trim().length > 0;
+    $("clearSearchBtn").classList.toggle("hidden", !hasQ);
+    feedSig = "";
+    renderRadars();
+    renderFeed();
+  }
+
+  function clearSearchBox() {
+    $("instantSearch").value = "";
+    $("clearSearchBtn").classList.add("hidden");
+    activeKeywordFilter = null;
+    resetSubFiltersOnly();
+    sentFilter = null;
+    syncSentButtons();
+    renderKeywords();
+    feedSig = "";
+    renderRadars();
+    renderFeed();
+  }
+
+  function clearAllFilters() {
+    clearSearchBox();
+  }
+
   function renderKeywords() {
     $("kwChips").innerHTML = keywords.map((k, i) => {
       const active = activeKeywordFilter === k;
@@ -456,7 +600,7 @@
     inp.value = "";
   }
 
-  // ---------- filters ----------
+  // ---------- tabs & filters ----------
   function setSource(src) {
     currentSource = src;
     document.querySelectorAll(".src-btn").forEach(b => {
@@ -480,18 +624,20 @@
     $("gScopeX").className = scope === "X" ? "px-2 py-0.5 rounded bg-sky-600 text-white font-bold" : "px-2 py-0.5 rounded text-slate-300 font-bold";
     if (latestPayload) renderCharts(latestPayload);
   }
-  function toggleSentFilter(mode) {
-    sentFilter = sentFilter === mode ? null : mode;
+  function syncSentButtons() {
     $("negOnlyBtn").className = sentFilter === "negative"
       ? "px-2.5 py-1.5 rounded-lg bg-red-600 text-white font-semibold"
       : "px-2.5 py-1.5 rounded-lg bg-red-950/60 border border-red-700/50 text-red-300";
     $("posOnlyBtn").className = sentFilter === "positive"
       ? "px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold"
       : "px-2.5 py-1.5 rounded-lg bg-emerald-950/60 border border-emerald-700/50 text-emerald-300";
+  }
+  function toggleSentFilter(mode) {
+    sentFilter = sentFilter === mode ? null : mode;
+    syncSentButtons();
     feedSig = "";
     renderFeed();
   }
-  function clearSubFilters() { resetFilters(); feedSig = ""; renderRadars(); renderFeed(); }
 
   // ---------- global click delegation ----------
   document.addEventListener("click", e => {
@@ -502,12 +648,12 @@
     e.stopPropagation();
     const v = el.dataset.val || "";
     switch (el.dataset.act) {
-      case "kwfilter": { const k = keywords[+v]; activeKeywordFilter = activeKeywordFilter === k ? null : k; renderKeywords(); feedSig = ""; renderFeed(); break; }
+      case "kwfilter": { const k = keywords[+v]; activeKeywordFilter = activeKeywordFilter === k ? null : k; renderKeywords(); feedSig = ""; renderRadars(); renderFeed(); break; }
       case "kwremove": { const k = keywords[+v]; keywords.splice(+v, 1); if (activeKeywordFilter === k) activeKeywordFilter = null; localStorage.setItem("rajwatch_kw", JSON.stringify(keywords)); renderKeywords(); fetchFeed(true); break; }
       case "district": selectedDistrict = selectedDistrict === v ? null : v; feedSig = ""; renderRadars(); renderFeed(); break;
       case "dept": selectedDept = selectedDept === v ? null : v; feedSig = ""; renderRadars(); renderFeed(); break;
-      case "account": selectedAccount = v; selectedHandle = null; feedSig = ""; renderRadars(); setSource("ALL"); break;
-      case "handle": selectedHandle = v; selectedAccount = null; feedSig = ""; renderRadars(); setSource("X"); break;
+      case "account": selectedAccount = (selectedAccount === v ? null : v); selectedHandle = null; feedSig = ""; renderRadars(); if (currentSource !== "SEARCH") setSource("ALL"); else renderFeed(); break;
+      case "handle": selectedHandle = (selectedHandle === v ? null : v); selectedAccount = null; feedSig = ""; renderRadars(); if (currentSource !== "SEARCH") setSource("X"); else renderFeed(); break;
       case "delmanual": if (confirm("यह पोस्ट हटानी है?")) api("/api/manual/" + encodeURIComponent(v), { method: "DELETE" }).then(() => fetchFeed(true)); break;
       case "playtv": playTv(+v); break;
     }
@@ -515,7 +661,14 @@
 
   // ---------- rendering ----------
   function highlightText(txt) {
-    const ks = keywords.filter(k => k.length >= 2).map(k => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    const terms = [...keywords];
+    const q = $("instantSearch").value.trim();
+    if (q.length >= 2) {
+      terms.push(q);
+      const qNoSp = q.replace(/\s+/g, "");
+      if (qNoSp.length >= 3 && qNoSp !== q) terms.push(qNoSp);
+    }
+    const ks = [...new Set(terms.filter(k => k.length >= 2))].map(k => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
     if (!ks.length) return esc(txt);
     const re = new RegExp("(" + ks.join("|") + ")", "gi");
     return String(txt || "").split(re).map((part, i) => i % 2 === 1 ? `<mark class="bg-amber-400/25 text-amber-200 px-1 rounded">${esc(part)}</mark>` : esc(part)).join("");
@@ -585,7 +738,10 @@
       return `<button data-act="dept" data-val="${esc(d.name)}" class="px-2 py-1 rounded-md text-[11px] border border-slate-700 text-slate-200 hover:border-sky-400 ${active}">${esc(d.name)}: ${d.total}${neg}</button>`;
     }).join("");
 
+    const q = $("instantSearch").value.trim();
     const parts = [];
+    if (q) parts.push(`Search: "${q}"`);
+    if (activeKeywordFilter) parts.push(`Keyword: ${activeKeywordFilter}`);
     if (selectedAccount) parts.push("Account: " + selectedAccount);
     if (selectedHandle) parts.push("Handle: " + selectedHandle);
     if (selectedDistrict) parts.push("District: " + selectedDistrict);
@@ -605,27 +761,79 @@
       <div style="width:${p}%" class="bg-emerald-500"></div><div style="width:${n}%" class="bg-red-500"></div><div style="width:${u}%" class="bg-slate-600"></div></div>`;
   }
 
+  // Recomputes handle-wise stats dynamically when user searches a topic like "bhajan lal"
+  function computeHandlesFromTweets(xItems) {
+    const map = new Map();
+    const tagRx = /#[\w\u0900-\u097F]+/g;
+    xItems.forEach(it => {
+      const hkey = it.handle || it.author;
+      let st = map.get(hkey);
+      if (!st) {
+        st = { handle: hkey, name: it.author, total: 0, positive: 0, negative: 0, neutral: 0, likes: 0, retweets: 0, _dept: {}, _dist: {}, _tags: {}, worst: null };
+        map.set(hkey, st);
+      }
+      st.total++;
+      st[it.sentiment] = (st[it.sentiment] || 0) + 1;
+      st.likes += (it.likes || 0);
+      st.retweets += (it.retweets || 0);
+      st._dept[it.department] = (st._dept[it.department] || 0) + 1;
+      if (it.district && it.district !== "Statewide") st._dist[it.district] = (st._dist[it.district] || 0) + 1;
+      const tags = new Set((it.text.match(tagRx) || []).map(t => t.toLowerCase()));
+      tags.forEach(tg => { st._tags[tg] = (st._tags[tg] || 0) + 1; });
+      if (it.sentiment === "negative") {
+        const eng = (it.likes || 0) + (it.retweets || 0);
+        if (!st.worst || eng >= st.worst.eng) st.worst = { text: it.text.slice(0, 160), url: it.url, eng };
+      }
+    });
+    const topN = (obj, n) => Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, n).map(([name, count]) => ({ name, count }));
+    return Array.from(map.values()).map(st => {
+      const t = Math.max(st.total, 1);
+      st.pos_pct = +(st.positive / t * 100).toFixed(1);
+      st.neg_pct = +(st.negative / t * 100).toFixed(1);
+      st.neu_pct = +(st.neutral / t * 100).toFixed(1);
+      st.topics = topN(st._dept, 3);
+      st.districts = topN(st._dist, 2);
+      st.hashtags = topN(st._tags, 3);
+      return st;
+    });
+  }
+
   function renderHandles() {
     const tbody = $("handlesBody");
-    const all = (latestPayload && latestPayload.handles) || [];
-    const q = $("instantSearch").value.trim().toLowerCase();
+    const q = $("instantSearch").value.trim();
     const sortBy = $("hSort").value;
-    let list = all.filter(h => {
-      if (q && !(h.handle + " " + h.name).toLowerCase().includes(q)) return false;
+
+    let baseList;
+    if (q || activeKeywordFilter) {
+      const matchingX = allItems.filter(it =>
+        it.source === "X" &&
+        (!q || matchesText(it, q)) &&
+        (!activeKeywordFilter || matchesText(it, activeKeywordFilter))
+      );
+      baseList = computeHandlesFromTweets(matchingX);
+    } else {
+      baseList = (latestPayload && latestPayload.handles) ? [...latestPayload.handles] : [];
+    }
+
+    let list = baseList.filter(h => {
       if (sentFilter === "negative" && !h.negative) return false;
       if (sentFilter === "positive" && !h.positive) return false;
       return true;
     });
+
     list.sort((a, b) => {
       if (sortBy === "negative") return (b.negative - a.negative) || (b.total - a.total);
       if (sortBy === "positive") return (b.positive - a.positive) || (b.total - a.total);
       if (sortBy === "engagement") return ((b.likes + b.retweets) - (a.likes + a.retweets)) || (b.total - a.total);
       return (b.total - a.total) || (b.negative - a.negative);
     });
-    const totalTweets = all.reduce((s, h) => s + h.total, 0);
-    $("handlesSummary").textContent = `${all.length} handles · ${totalTweets} tweets (${latestPayload ? latestPayload.active_date : ""}${selectedDate ? "" : ", पिछले 24 घंटे"})`;
+
+    const totalTweets = list.reduce((s, h) => s + h.total, 0);
+    const topicLabel = q ? ` · Topic: "${q}"` : (activeKeywordFilter ? ` · Keyword: "${activeKeywordFilter}"` : "");
+    $("handlesSummary").textContent = `${list.length} handles · ${totalTweets} tweets${topicLabel} (${latestPayload ? latestPayload.active_date : ""})`;
     $("postCount").textContent = list.length + " handles";
-    if (!list.length) { tbody.innerHTML = '<tr><td colspan="10" class="py-8 text-center text-slate-400">कोई handle नहीं मिला।</td></tr>'; return; }
+    if (!list.length) { tbody.innerHTML = '<tr><td colspan="10" class="py-8 text-center text-slate-400">इस filter पर कोई handle नहीं मिला।</td></tr>'; return; }
+
     tbody.innerHTML = list.map(h => {
       const topics = (h.topics || []).map(t => `<span class="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-200 border border-sky-500/30">${esc(t.name)} ×${t.count}</span>`).join(" ");
       const dists = (h.districts || []).map(t => `<span class="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-200 border border-amber-500/30">${esc(t.name)} ×${t.count}</span>`).join(" ");
@@ -677,8 +885,60 @@
     }).join("");
   }
 
+  function renderSearchHandlesSummary(matchingItems) {
+    const box = $("searchHandlesBox");
+    if (!matchingItems.length) { box.classList.add("hidden"); return; }
+
+    // Group matching posts by handle/account (X handles shown first)
+    const map = new Map();
+    matchingItems.forEach(it => {
+      const isX = it.source === "X";
+      const key = isX ? ("H:" + (it.handle || it.author)) : ("A:" + it.author);
+      let row = map.get(key);
+      if (!row) {
+        row = {
+          act: isX ? "handle" : "account",
+          val: isX ? (it.handle || it.author) : it.author,
+          label: isX ? (it.handle || it.author) : it.author,
+          source: it.source,
+          total: 0, pos: 0, neg: 0, neu: 0
+        };
+        map.set(key, row);
+      }
+      row.total++;
+      if (it.sentiment === "positive") row.pos++;
+      else if (it.sentiment === "negative") row.neg++;
+      else row.neu++;
+    });
+
+    const rows = Array.from(map.values()).sort((a, b) => {
+      if (a.source === "X" && b.source !== "X") return -1;
+      if (b.source === "X" && a.source !== "X") return 1;
+      return (b.total - a.total) || (b.neg - a.neg);
+    });
+
+    const xHandles = rows.filter(r => r.source === "X").length;
+    const q = $("instantSearch").value.trim() || activeKeywordFilter || selectedDistrict || selectedDept || "Filter";
+    $("searchHandlesTitle").textContent = `"${q}" — ${rows.length} Matching Handles/Sources (${xHandles} X Handles, ${matchingItems.length} Posts)`;
+
+    $("searchHandlesList").innerHTML = rows.slice(0, 30).map(r => {
+      const active = (r.act === "handle" && selectedHandle === r.val) || (r.act === "account" && selectedAccount === r.val);
+      const b = SOURCE_BADGES[r.source] || SOURCE_BADGES.NEWS;
+      return `<button data-act="${r.act}" data-val="${esc(r.val)}" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] border transition ${active ? "ring-2 ring-sky-400 bg-sky-500/25 border-sky-400 text-white" : "bg-slate-900/90 border-slate-700 text-slate-200 hover:border-sky-400"}">
+        <span class="px-1 rounded text-[9px] font-bold border ${b.cls}">${b.short}</span>
+        <span class="font-semibold">${esc(r.label)}</span>
+        <span class="text-white font-extrabold">${r.total}</span>
+        ${r.pos ? `<span class="text-emerald-400 font-bold">+${r.pos}</span>` : ""}
+        ${r.neg ? `<span class="text-red-400 font-bold">-${r.neg}</span>` : ""}
+      </button>`;
+    }).join("");
+
+    box.classList.remove("hidden");
+  }
+
   function showView(name) {
     ["feed", "accountsView", "handlesView", "liveTvWall"].forEach(id => $(id).classList.toggle("hidden", id !== name));
+    if (name !== "feed") $("searchHandlesBox").classList.add("hidden");
   }
 
   function playTv(i) {
@@ -717,7 +977,7 @@
                 : `${open} class="relative z-10 px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm">YouTube पर देखें ↗</a>`}
             </div>
             <div class="p-3 flex items-center justify-between gap-2">
-              <span class="text-[10px] font-bold px-2 py-0.5 rounded ${s.is_live ? "bg-rose-600 text-white" : "bg-slate-700 text-slate-300"}">${s.is_live ? "● LIVE" : "live की पुष्टि नहीं"}</span>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded ${s.is_live ? "bg-rose-600 text-white" : "bg-slate-700 text-slate-300"}">${s.is_live ? "● LIVE" : "Latest Video"}</span>
               <span class="text-[11px] text-slate-400">${esc(s.source)}</span>
               ${open} class="text-xs text-sky-400 font-semibold">YouTube पर खोलें ↗</a>
             </div>
@@ -729,8 +989,28 @@
 
     showView("feed");
     const container = $("feed");
-    const q = $("instantSearch").value.trim().toLowerCase();
-    const filtered = allItems.filter(it => {
+    const q = $("instantSearch").value.trim();
+
+    // Main screen ("SEARCH") stays completely BLANK whenever no filter is applied
+    const hasFilter = Boolean(q || activeKeywordFilter || selectedDistrict || selectedDept || selectedAccount || selectedHandle || sentFilter);
+    if (currentSource === "SEARCH" && !hasFilter) {
+      $("searchHandlesBox").classList.add("hidden");
+      $("postCount").textContent = "Blank";
+      lastFilteredItems = [];
+      feedSig = "BLANK";
+      container.innerHTML = `
+        <div class="col-span-full rounded-2xl border border-dashed border-slate-800/90 bg-[#080e1a]/60 py-24 px-6 text-center space-y-2">
+          <div class="text-sm font-semibold text-slate-400">Main Screen Blank है</div>
+          <p class="text-xs text-slate-500 max-w-md mx-auto">
+            ऊपर search में कोई भी नाम या विषय लिखें (जैसे <b class="text-sky-400">Bhajan Lal</b>, <b class="text-sky-400">RPSC</b>, <b class="text-sky-400">@handle</b>) — सभी matching handles और उनके posts यहाँ आ जाएँगे। Filter हटाते ही स्क्रीन फिर blank हो जाएगी।
+          </p>
+          <p class="text-[11px] text-emerald-400/80 pt-1">Normal Admin News और Live Feed देखने के लिए ऊपर <b>"All Admin &amp; Live"</b> tab खोलें।</p>
+        </div>`;
+      return;
+    }
+
+    // Items matching base query/filters (before handle/account narrowing, so handle breakdown stays visible while clicking handles)
+    const baseFiltered = allItems.filter(it => {
       if (currentSource === "X" && it.source !== "X") return false;
       if (currentSource === "NEWSPAPER" && it.source !== "NEWSPAPER") return false;
       if (currentSource === "NEWS" && it.source !== "NEWS") return false;
@@ -741,20 +1021,35 @@
       if (sentFilter && it.sentiment !== sentFilter) return false;
       if (selectedDistrict && it.district !== selectedDistrict) return false;
       if (selectedDept && it.department !== selectedDept) return false;
-      if (selectedAccount && it.author !== selectedAccount) return false;
-      if (selectedHandle && it.handle !== selectedHandle) return false;
-      const hay = (it.text + " " + it.author + " " + (it.handle || "")).toLowerCase();
-      if (activeKeywordFilter && !hay.includes(activeKeywordFilter.toLowerCase())) return false;
-      if (q && !hay.includes(q)) return false;
+      if (activeKeywordFilter && !matchesText(it, activeKeywordFilter)) return false;
+      if (q && !matchesText(it, q)) return false;
       return true;
     });
+
+    // Show Matching Handles summary box when searching on Main screen (or when searching any topic)
+    if (currentSource === "SEARCH" || q || activeKeywordFilter) {
+      renderSearchHandlesSummary(baseFiltered);
+    } else {
+      $("searchHandlesBox").classList.add("hidden");
+    }
+
+    const filtered = baseFiltered.filter(it => {
+      if (selectedAccount && it.author !== selectedAccount) return false;
+      if (selectedHandle && it.handle !== selectedHandle) return false;
+      return true;
+    });
+
+    lastFilteredItems = filtered;
     $("postCount").textContent = filtered.length + " posts";
 
-    const sig = filtered.map(i => i.id).join(",") + "|" + (activeKeywordFilter || "") + "|" + keywords.join(",") + "|" + selectedDate + "|" + q;
+    const sig = currentSource + "|" + filtered.map(i => i.id).join(",") + "|" + (activeKeywordFilter || "") + "|" + (selectedHandle || "") + "|" + (selectedAccount || "") + "|" + selectedDate + "|" + q;
     if (sig === feedSig && newIdSet.size === 0) return;
     feedSig = sig;
 
-    if (!filtered.length) { container.innerHTML = '<div class="col-span-full text-center py-12 text-slate-400 text-sm">इस date / filter पर कोई पोस्ट नहीं मिली।</div>'; return; }
+    if (!filtered.length) {
+      container.innerHTML = '<div class="col-span-full text-center py-12 text-slate-400 text-sm">इस date / filter पर कोई पोस्ट नहीं मिली।</div>';
+      return;
+    }
     const y = window.scrollY;
     container.innerHTML = filtered.map(it => {
       const isNew = newIdSet.has(it.id);
@@ -770,7 +1065,7 @@
             <div class="flex items-center gap-1 flex-wrap">${srcBadge(it)} ${sent} ${nb}<span class="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300">${esc(it.district)}</span></div>
             <span class="text-emerald-300 font-semibold whitespace-nowrap">${timeLabel(it)}</span>
           </div>
-          <p class="text-xs font-semibold text-sky-300 mb-1 cursor-pointer hover:underline" data-act="account" data-val="${esc(it.author)}">${esc(it.author)}</p>
+          <p class="text-xs font-semibold text-sky-300 mb-1 cursor-pointer hover:underline" data-act="${it.source === "X" ? "handle" : "account"}" data-val="${esc(it.source === "X" ? (it.handle || it.author) : it.author)}">${esc(it.author)}</p>
           <p class="text-[13px] text-slate-100 leading-relaxed mb-3 break-words">${highlightText(it.text)}</p>
         </div>
         <div class="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-800/80">
@@ -837,6 +1132,13 @@
     allItems.forEach(i => rows.push([i.date_ist, i.time_str, i.source, i.author, i.language, i.sentiment, i.district, i.department, i.text, i.url]));
     downloadCSV(`CIU_Watch_Feed_${(latestPayload && latestPayload.active_date) || "report"}.csv`, rows);
   }
+  function exportFilteredCSV() {
+    if (!lastFilteredItems.length) return;
+    const rows = [["Date", "Time (IST)", "Source", "Author", "Handle", "Language", "Sentiment", "District", "Department", "Text", "Link"]];
+    lastFilteredItems.forEach(i => rows.push([i.date_ist, i.time_str, i.source, i.author, i.handle || "", i.language, i.sentiment, i.district, i.department, i.text, i.url]));
+    const tag = ($("instantSearch").value.trim() || activeKeywordFilter || "filtered").replace(/\W+/g, "_").slice(0, 25);
+    downloadCSV(`CIU_Watch_${tag}_${(latestPayload && latestPayload.active_date) || "report"}.csv`, rows);
+  }
   function exportAccountsCSV() {
     if (!latestPayload || !latestPayload.accounts) return;
     const rows = [["Account", "Source", "Total", "Positive", "Positive %", "Negative", "Negative %", "Neutral", "Stance", "Likes", "Retweets"]];
@@ -844,27 +1146,42 @@
     downloadCSV(`CIU_Watch_Accounts_${latestPayload.active_date}.csv`, rows);
   }
   function exportHandlesCSV() {
-    if (!latestPayload || !latestPayload.handles) return;
+    const q = $("instantSearch").value.trim();
+    let list;
+    if (q || activeKeywordFilter) {
+      const matchingX = allItems.filter(it => it.source === "X" && (!q || matchesText(it, q)) && (!activeKeywordFilter || matchesText(it, activeKeywordFilter)));
+      list = computeHandlesFromTweets(matchingX);
+    } else {
+      list = (latestPayload && latestPayload.handles) || [];
+    }
+    if (!list.length) return;
     const rows = [["Handle", "Name", "Tweets", "Positive", "Positive %", "Negative", "Negative %", "Neutral", "Likes", "Retweets", "Top Topics", "Districts", "Hashtags", "Sabse teekha tweet", "Link"]];
-    latestPayload.handles.forEach(h => rows.push([
+    list.forEach(h => rows.push([
       h.handle, h.name, h.total, h.positive, h.pos_pct, h.negative, h.neg_pct, h.neutral, h.likes, h.retweets,
       (h.topics || []).map(t => `${t.name} (${t.count})`).join("; "),
       (h.districts || []).map(t => `${t.name} (${t.count})`).join("; "),
       (h.hashtags || []).map(t => `${t.name} (${t.count})`).join("; "),
       h.worst ? h.worst.text : "", h.worst ? h.worst.url : ""
     ]));
-    downloadCSV(`CIU_Watch_Handles_${latestPayload.active_date}.csv`, rows);
+    downloadCSV(`CIU_Watch_Handles_${(latestPayload && latestPayload.active_date) || "report"}.csv`, rows);
   }
 
-  // ---------- main fetch (AbortController prevents ignored user clicks) ----------
+  // ---------- main fetch ----------
   function updateConn() {
     const dot = $("liveDot"), txt = $("connText");
     if (!lastOkTs) return;
     const age = Math.floor((Date.now() - lastOkTs) / 1000);
-    const stale = !selectedDate && scanInterval !== 0 && age > 120;
-    dot.className = "h-3 w-3 rounded-full " + (selectedDate ? "bg-amber-400" : stale || failCount > 1 ? "bg-red-500" : "bg-emerald-400 animate-pulse");
-    txt.textContent = "आख़िरी सफल अपडेट: " + (age < 90 ? age + "s" : Math.floor(age / 60) + "m") + " पहले";
-    txt.className = stale ? "text-red-400 font-semibold" : "";
+    const stale = !selectedDate && !isPaused && scanInterval !== 0 && age > 120;
+    dot.className = "h-3 w-3 rounded-full " + (
+      selectedDate ? "bg-amber-400"
+      : isPaused ? "bg-amber-400"
+      : stale || failCount > 1 ? "bg-red-500"
+      : "bg-emerald-400 animate-pulse"
+    );
+    txt.textContent = isPaused
+      ? "Paused (आख़िरी sync: " + (age < 90 ? age + "s" : Math.floor(age / 60) + "m") + " पहले)"
+      : "आख़िरी सफल अपडेट: " + (age < 90 ? age + "s" : Math.floor(age / 60) + "m") + " पहले";
+    txt.className = stale ? "text-red-400 font-semibold" : (isPaused ? "text-amber-300 font-semibold" : "");
   }
 
   async function fetchFeed(force = false) {
@@ -881,7 +1198,10 @@
         { signal: myCtrl.signal }
       );
       if (myCtrl !== activeCtrl) return;
-      latestPayload = data; lastOkTs = Date.now(); failCount = 0;
+      latestPayload = data;
+      lastOkTs = Date.now();
+      lastServerTime = data.server_time || (Date.now() / 1000);
+      missedX = 0; missedMedia = 0; failCount = 0;
       $("connBox").classList.add("hidden");
       applyPayload(data);
     } catch (e) {
@@ -944,7 +1264,7 @@
       }
     });
     allItems = data.items || [];
-    renderCharts(data); renderRadars(); renderFeed(newIds);
+    renderCharts(data); renderRadars(); renderFeed(newIds); updatePauseUI();
 
     if (!firstLoad && !isArchive && newIds.size > 0) {
       playBeep(hasAlert);
@@ -957,12 +1277,19 @@
 
   // ---------- start ----------
   initIntervalUI();
+  updatePauseUI();
   renderKeywords();
+  renderFeed();
   fetchFeed(false);
 
   setInterval(() => {
     updateConn();
-    if (selectedDate || scanInterval === 0) return;
+    if (selectedDate) return;
+    if (isPaused || scanInterval === 0) {
+      pulseTick++;
+      if (pulseTick >= 20) { pulseTick = 0; checkPausedPulse(); }
+      return;
+    }
     countdown--;
     if (countdown <= 0) fetchFeed(false);
     const t = $("timer"); if (t) t.textContent = Math.max(countdown, 0);
