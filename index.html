@@ -305,7 +305,17 @@
   let sentFilter = null, selectedDistrict = null, selectedDept = null, selectedAccount = null, selectedHandle = null;
   let selectedDate = "", soundOn = true, allItems = [], latestPayload = null;
   let seenIds = new Set(), firstLoad = true, hourlyChartObj = null, donutChartObj = null;
-  let inFlight = false, lastOkTs = 0, failCount = 0, feedSig = "", tvSig = "", audioCtx = null;
+  let inFlight = false, activeCtrl = null, lastOkTs = 0, failCount = 0, feedSig = "", tvSig = "", audioCtx = null;
+
+  // Explicit badge classes so Tailwind CDN always renders all colors reliably
+  const SOURCE_BADGES = {
+    X:         { short: "X",     full: "X LIVE",    cls: "bg-sky-500/20 text-sky-300 border-sky-500/30" },
+    YOUTUBE:   { short: "YT",    full: "YOUTUBE",   cls: "bg-red-500/20 text-red-300 border-red-500/30" },
+    NEWSPAPER: { short: "PAPER", full: "PAPER",     cls: "bg-purple-500/20 text-purple-300 border-purple-500/30" },
+    FACEBOOK:  { short: "FB",    full: "FACEBOOK",  cls: "bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30" },
+    INSTAGRAM: { short: "IG",    full: "INSTAGRAM", cls: "bg-pink-500/20 text-pink-300 border-pink-500/30" },
+    NEWS:      { short: "NEWS",  full: "NEWS",      cls: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" },
+  };
 
   // ---------- helpers ----------
   function esc(s) {
@@ -332,7 +342,7 @@
     return Math.floor(d / 86400) + "d ago";
   }
   function timeLabel(it) {
-    if (selectedDate) return it.date_label + ", " + it.time_str;
+    if (selectedDate) return esc(it.date_label + ", " + it.time_str);
     if (it.ts_approx) return "समय अज्ञात";
     return `<span data-ago="${it.ts}">${timeAgo(it.ts)}</span>`;
   }
@@ -391,14 +401,19 @@
   function enableNotifications() {
     if (!("Notification" in window)) return alert("यह browser notifications support नहीं करता।");
     Notification.requestPermission().then(p => {
-      if (p === "granted") { $("notifBtn").textContent = "Popup: ON"; new Notification("CIU Watch Ready", { body: "नया update आते ही popup मिलेगा!" }); }
+      if (p === "granted") {
+        $("notifBtn").textContent = "Popup: ON";
+        new Notification("CIU Watch Ready", { body: "नया update आते ही popup मिलेगा!" });
+      }
     });
   }
 
   // ---------- interval / date ----------
   function initIntervalUI() {
     $("intervalSelect").value = String(scanInterval);
-    $("timerPill").innerHTML = scanInterval === 0 ? '<span class="text-amber-300 font-bold">Paused</span>' : `<b id="timer">${countdown}</b>s`;
+    $("timerPill").innerHTML = scanInterval === 0
+      ? '<span class="text-amber-300 font-bold">Paused</span>'
+      : `<b id="timer">${countdown}</b>s`;
   }
   function changeInterval() {
     scanInterval = parseInt($("intervalSelect").value, 10);
@@ -410,7 +425,8 @@
     const val = $("datePicker").value;
     const today = latestPayload && latestPayload.today_date ? latestPayload.today_date : "";
     selectedDate = (val && val !== today) ? val : "";
-    resetFilters(); firstLoad = true; seenIds.clear(); feedSig = ""; fetchFeed(true);
+    resetFilters(); firstLoad = true; seenIds.clear(); feedSig = "";
+    fetchFeed(true);
   }
   function resetToLive() {
     selectedDate = "";
@@ -434,7 +450,8 @@
     if (val && val.length <= 40 && !val.includes(":") && !keywords.includes(val)) {
       keywords.unshift(val);
       localStorage.setItem("rajwatch_kw", JSON.stringify(keywords));
-      renderKeywords(); fetchFeed(true);
+      renderKeywords();
+      fetchFeed(true);
     }
     inp.value = "";
   }
@@ -451,7 +468,9 @@
   function setAccSource(src) {
     accSourceFilter = src;
     ["ALL", "X", "MEDIA"].forEach(k => {
-      $("accSrc" + k).className = k === src ? "px-2.5 py-1 rounded-lg bg-sky-600 text-white font-semibold" : "px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300";
+      $("accSrc" + k).className = k === src
+        ? "px-2.5 py-1 rounded-lg bg-sky-600 text-white font-semibold"
+        : "px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300";
     });
     renderAccounts();
   }
@@ -463,14 +482,18 @@
   }
   function toggleSentFilter(mode) {
     sentFilter = sentFilter === mode ? null : mode;
-    $("negOnlyBtn").className = sentFilter === "negative" ? "px-2.5 py-1.5 rounded-lg bg-red-600 text-white font-semibold" : "px-2.5 py-1.5 rounded-lg bg-red-950/60 border border-red-700/50 text-red-300";
-    $("posOnlyBtn").className = sentFilter === "positive" ? "px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold" : "px-2.5 py-1.5 rounded-lg bg-emerald-950/60 border border-emerald-700/50 text-emerald-300";
+    $("negOnlyBtn").className = sentFilter === "negative"
+      ? "px-2.5 py-1.5 rounded-lg bg-red-600 text-white font-semibold"
+      : "px-2.5 py-1.5 rounded-lg bg-red-950/60 border border-red-700/50 text-red-300";
+    $("posOnlyBtn").className = sentFilter === "positive"
+      ? "px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold"
+      : "px-2.5 py-1.5 rounded-lg bg-emerald-950/60 border border-emerald-700/50 text-emerald-300";
     feedSig = "";
     renderFeed();
   }
   function clearSubFilters() { resetFilters(); feedSig = ""; renderRadars(); renderFeed(); }
 
-  // ---------- global click delegation (safe: no inline JS with data) ----------
+  // ---------- global click delegation ----------
   document.addEventListener("click", e => {
     const sb = e.target.closest(".src-btn");
     if (sb) { setSource(sb.dataset.src); return; }
@@ -500,7 +523,9 @@
 
   function mkLine(chart, labels, neg, pos, neu) {
     chart.data.labels = labels;
-    chart.data.datasets[0].data = neg; chart.data.datasets[1].data = pos; chart.data.datasets[2].data = neu;
+    chart.data.datasets[0].data = neg;
+    chart.data.datasets[1].data = pos;
+    chart.data.datasets[2].data = neu;
     chart.update("none");
   }
   function renderCharts(data) {
@@ -516,11 +541,16 @@
         data: { labels: [], datasets: [
           { label: "Negative", data: [], borderColor: "#f87171", backgroundColor: "rgba(248,113,113,0.18)", fill: true, tension: 0.35, borderWidth: 2 },
           { label: "Positive", data: [], borderColor: "#34d399", backgroundColor: "rgba(52,211,153,0.14)", fill: true, tension: 0.35, borderWidth: 2 },
-          { label: "Neutral", data: [], borderColor: "#94a3b8", borderDash: [3, 3], tension: 0.35, borderWidth: 1.3 } ] },
-        options: { animation: false, responsive: true, maintainAspectRatio: false,
+          { label: "Neutral", data: [], borderColor: "#94a3b8", borderDash: [3, 3], tension: 0.35, borderWidth: 1.3 }
+        ] },
+        options: {
+          animation: false, responsive: true, maintainAspectRatio: false,
           plugins: { legend: { labels: { color: "#cbd5e1", font: { size: 10 }, boxWidth: 10 } } },
-          scales: { x: { ticks: { color: "#94a3b8", font: { size: 9 } }, grid: { color: "rgba(51,65,85,0.25)" } },
-                    y: { beginAtZero: true, ticks: { color: "#94a3b8", font: { size: 9 }, precision: 0 }, grid: { color: "rgba(51,65,85,0.25)" } } } }
+          scales: {
+            x: { ticks: { color: "#94a3b8", font: { size: 9 } }, grid: { color: "rgba(51,65,85,0.25)" } },
+            y: { beginAtZero: true, ticks: { color: "#94a3b8", font: { size: 9 }, precision: 0 }, grid: { color: "rgba(51,65,85,0.25)" } }
+          }
+        }
       });
     }
     mkLine(hourlyChartObj, cd.labels, cd.negative, cd.positive, cd.neutral);
@@ -531,10 +561,15 @@
       donutChartObj = new Chart($("donutChart").getContext("2d"), {
         type: "doughnut",
         data: { labels: ["Negative", "Positive", "Neutral"], datasets: [{ data: dv, backgroundColor: ["#ef4444", "#10b981", "#64748b"], borderWidth: 0 }] },
-        options: { animation: false, responsive: true, maintainAspectRatio: false, cutout: "62%",
-          plugins: { legend: { position: "right", labels: { color: "#cbd5e1", font: { size: 10 }, boxWidth: 10 } } } }
+        options: {
+          animation: false, responsive: true, maintainAspectRatio: false, cutout: "62%",
+          plugins: { legend: { position: "right", labels: { color: "#cbd5e1", font: { size: 10 }, boxWidth: 10 } } }
+        }
       });
-    } else { donutChartObj.data.datasets[0].data = dv; donutChartObj.update("none"); }
+    } else {
+      donutChartObj.data.datasets[0].data = dv;
+      donutChartObj.update("none");
+    }
   }
 
   function renderRadars() {
@@ -627,12 +662,11 @@
       : sortBy === "positive" ? (b.positive - a.positive) || (b.total - a.total) : (b.total - a.total) || (b.negative - a.negative));
     $("postCount").textContent = list.length + " accounts";
     if (!list.length) { tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-400">कोई account नहीं मिला।</td></tr>'; return; }
-    const tag = { X: ["sky", "X"], YOUTUBE: ["red", "YT"], NEWSPAPER: ["purple", "PAPER"], FACEBOOK: ["fuchsia", "FB"], INSTAGRAM: ["pink", "IG"] };
     tbody.innerHTML = list.map(a => {
-      const t = tag[a.source] || ["emerald", "NEWS"];
+      const b = SOURCE_BADGES[a.source] || SOURCE_BADGES.NEWS;
       return `<tr class="hover:bg-slate-800/50 transition">
         <td class="py-2.5 px-3"><div class="font-semibold text-slate-100">${esc(a.author)}</div></td>
-        <td class="py-2.5 px-2 text-center"><span class="px-1.5 py-0.5 rounded bg-${t[0]}-500/20 text-${t[0]}-300 border border-${t[0]}-500/30 font-bold text-[10px]">${t[1]}</span></td>
+        <td class="py-2.5 px-2 text-center"><span class="px-1.5 py-0.5 rounded border font-bold text-[10px] ${b.cls}">${b.short}</span></td>
         <td class="py-2.5 px-2 text-center font-extrabold text-white">${a.total}</td>
         <td class="py-2.5 px-2 text-center font-bold text-emerald-400">${a.positive} <span class="text-[10px] text-slate-500">(${a.pos_pct}%)</span></td>
         <td class="py-2.5 px-2 text-center font-bold text-red-400">${a.negative} <span class="text-[10px] text-slate-500">(${a.neg_pct}%)</span></td>
@@ -655,11 +689,10 @@
   }
 
   function srcBadge(it) {
-    const m = {
-      X: ["sky", "X LIVE"], YOUTUBE: ["red", "YOUTUBE"], NEWSPAPER: ["purple", "PAPER"],
-      FACEBOOK: ["fuchsia", "FACEBOOK"], INSTAGRAM: ["pink", "INSTAGRAM"]
-    }[it.source] || ["emerald", (it.language || "").toUpperCase() + " NEWS"];
-    return `<span class="px-2 py-0.5 rounded bg-${m[0]}-500/20 text-${m[0]}-300 border border-${m[0]}-500/30 font-bold">${esc(m[1])}</span>`;
+    const b = SOURCE_BADGES[it.source];
+    const label = b ? b.full : ((it.language || "").toUpperCase() + " NEWS");
+    const cls = b ? b.cls : SOURCE_BADGES.NEWS.cls;
+    return `<span class="px-2 py-0.5 rounded border font-bold ${cls}">${esc(label)}</span>`;
   }
 
   function renderFeed(newIdSet = new Set()) {
@@ -672,7 +705,7 @@
       const sig = JSON.stringify(streams.map(s => [s.source, s.embed_url, s.is_live]));
       if (sig !== tvSig) {
         tvSig = sig;
-                $("liveTvWall").innerHTML = streams.map((s, i) => {
+        $("liveTvWall").innerHTML = streams.map((s, i) => {
           const canEmbed = !!s.embed_url;
           const open = `<a href="${esc(safeUrl(s.watch_url))}" target="_blank" rel="noopener noreferrer"`;
           return `
@@ -717,8 +750,8 @@
     });
     $("postCount").textContent = filtered.length + " posts";
 
-    const sig = filtered.map(i => i.id).join(",") + "|" + (activeKeywordFilter || "") + "|" + keywords.join(",") + "|" + selectedDate;
-    if (sig === feedSig && newIdSet.size === 0) return;   // kuch badla nahi: DOM ko mat chhedo
+    const sig = filtered.map(i => i.id).join(",") + "|" + (activeKeywordFilter || "") + "|" + keywords.join(",") + "|" + selectedDate + "|" + q;
+    if (sig === feedSig && newIdSet.size === 0) return;
     feedSig = sig;
 
     if (!filtered.length) { container.innerHTML = '<div class="col-span-full text-center py-12 text-slate-400 text-sm">इस date / filter पर कोई पोस्ट नहीं मिली।</div>'; return; }
@@ -789,7 +822,12 @@
   function copyBrief() {
     const ta = $("briefText");
     ta.select();
-    navigator.clipboard.writeText(ta.value).then(() => alert("WhatsApp Brief copy हो गया!"));
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(ta.value).then(() => alert("WhatsApp Brief copy हो गया!"));
+    } else {
+      document.execCommand("copy");
+      alert("WhatsApp Brief copy हो गया!");
+    }
   }
 
   // ---------- exports ----------
@@ -818,7 +856,7 @@
     downloadCSV(`CIU_Watch_Handles_${latestPayload.active_date}.csv`, rows);
   }
 
-  // ---------- main fetch ----------
+  // ---------- main fetch (AbortController prevents ignored user clicks) ----------
   function updateConn() {
     const dot = $("liveDot"), txt = $("connText");
     if (!lastOkTs) return;
@@ -830,23 +868,33 @@
   }
 
   async function fetchFeed(force = false) {
-    if (inFlight) return;
+    if (inFlight && !force) return;
+    if (activeCtrl) { try { activeCtrl.abort(); } catch (e) {} }
+    activeCtrl = new AbortController();
+    const myCtrl = activeCtrl;
     inFlight = true;
     countdown = scanInterval || 30;
     try {
       const dateParam = selectedDate ? "&date=" + encodeURIComponent(selectedDate) : "";
-      const data = await api(`/api/feed?keywords=${encodeURIComponent(keywords.join(","))}&force=${force}${dateParam}`);
+      const data = await api(
+        `/api/feed?keywords=${encodeURIComponent(keywords.join(","))}&force=${force}${dateParam}`,
+        { signal: myCtrl.signal }
+      );
+      if (myCtrl !== activeCtrl) return;
       latestPayload = data; lastOkTs = Date.now(); failCount = 0;
       $("connBox").classList.add("hidden");
       applyPayload(data);
     } catch (e) {
+      if (e.name === "AbortError" || myCtrl !== activeCtrl) return;
       if (e.message !== "401") {
         failCount++;
         const box = $("connBox");
         box.textContent = "सर्वर से जवाब नहीं आ रहा (" + e.message + "). Render free साइट सो गई हो सकती है — 30-50 सेकंड रुककर Scan Now दबाइए।";
         box.classList.remove("hidden");
       }
-    } finally { inFlight = false; updateConn(); }
+    } finally {
+      if (myCtrl === activeCtrl) { inFlight = false; updateConn(); }
+    }
   }
 
   function applyPayload(data) {
@@ -880,7 +928,11 @@
     }
 
     const cb = $("crisisBadge"), cs = s.crisis_score;
-    const lvl = cs >= 60 ? ["HIGH", "bg-red-950/80 text-red-300 border-red-500"] : cs >= 30 ? ["MED", "bg-amber-950/80 text-amber-300 border-amber-500"] : ["SAFE", "bg-emerald-950/60 text-emerald-300 border-emerald-600/40"];
+    const lvl = cs >= 60
+      ? ["HIGH", "bg-red-950/80 text-red-300 border-red-500"]
+      : cs >= 30
+      ? ["MED", "bg-amber-950/80 text-amber-300 border-amber-500"]
+      : ["SAFE", "bg-emerald-950/60 text-emerald-300 border-emerald-600/40"];
     cb.textContent = `Crisis: ${cs}/100 (${lvl[0]})`;
     cb.className = "px-2.5 py-1 rounded-full border font-bold " + lvl[1];
 
@@ -896,8 +948,9 @@
 
     if (!firstLoad && !isArchive && newIds.size > 0) {
       playBeep(hasAlert);
-      if ("Notification" in window && Notification.permission === "granted" && newest)
+      if ("Notification" in window && Notification.permission === "granted" && newest) {
         new Notification(`CIU Watch — ${newest.source} (${newest.author})`, { body: newest.text.slice(0, 120) });
+      }
     }
     firstLoad = false;
   }
