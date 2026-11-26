@@ -30,14 +30,18 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
     "Accept-Language": "hi-IN,hi;q=0.9,en-IN;q=0.8,en;q=0.7",
 }
-YT_LIVE_HEADERS = {"User-Agent": HEADERS["User-Agent"], "Accept-Language": "en-US,en;q=0.9", "Cookie": "CONSENT=YES+cb; SOCS=CAI"}
+YT_LIVE_HEADERS = {
+    "User-Agent": HEADERS["User-Agent"],
+    "Accept-Language": "en-US,en;q=0.9",
+    "Cookie": "CONSENT=YES+cb; SOCS=CAI",
+}
 
 DEFAULT_KEYWORDS = ["Bhajanlal", "RajCMO", "Rajasthan govt", "Jaipur", "paper leak", "RPSC"]
 ACCESS_KEY = os.getenv("CIU_ACCESS_KEY", "").strip()
 UPSTASH_URL = os.getenv("UPSTASH_REDIS_REST_URL", "").strip().rstrip("/")
 UPSTASH_TOKEN = os.getenv("UPSTASH_REDIS_REST_TOKEN", "").strip()
-STATE_KEY = "ciuwatch:state:v3"
-STATE_FILE = Path(tempfile.gettempdir()) / "ciuwatch_state_v3.json"
+STATE_KEY = "ciuwatch:state:v4"
+STATE_FILE = Path(tempfile.gettempdir()) / "ciuwatch_state_v4.json"
 BG_COLLECT_INTERVAL = max(45, int(os.getenv("BG_COLLECT_SECONDS", "60")))
 
 
@@ -69,7 +73,9 @@ NEWSPAPER_FEEDS = [
 ] + parse_feed_env("PAPER_FEEDS")
 EXTRA_FEEDS = parse_feed_env("EXTRA_RSS")
 
-# ---- Rajasthan Prominent Leaders & CMO Registry ----
+# ============================================================================
+# RAJASTHAN PROMINENT LEADERS & CMO REGISTRY (Tracked Always, Despite Filter!)
+# ============================================================================
 LEADERS_CONFIG = [
     {"id": "cmo", "name": "CMO Rajasthan", "role": "CMO / Govt", "party": "GOVT", "handle": "@RajCMO",
      "terms": ["rajcmo", "cmo rajasthan", "cmo", "राजस्थान सरकार", "मुख्यमंत्री कार्यालय", "rajasthan govt", "bhajanlal govt", "भजनलाल सरकार"]},
@@ -107,7 +113,41 @@ LEADER_X_QUERY_TERMS = [
     '"Diya Kumari"', '"Vasundhara Raje"', '"Kirodi Lal"', '"Tikaram Jully"', '"Hanuman Beniwal"',
 ]
 
-# ---- Deep Sentiment Lexicons (Hindi + Hinglish + English) ----
+# ============================================================================
+# BJP / RAJASTHAN GOVT PERSPECTIVE SENTIMENT ENGINE
+# ============================================================================
+GOV_BJP_TERMS = [
+    "bhajanlal", "bhajan lal", "bhajanlalbjp", "cmo", "rajcmo", "cm", "chief minister",
+    "govt", "government", "bjp", "bjp4rajasthan", "bjp4india", "modi", "narendra modi",
+    "pm modi", "minister", "diya kumari", "kumaridiya", "bairwa", "prem chand bairwa",
+    "vasundhara", "kirodi", "kirodilal", "dilawar", "madan rathore", "shekhawat",
+    "double engine", "state govt", "rajasthan govt", "raj govt", "cabinet", "administration",
+    "police", "jda", "rpsc", "rssb", "phed", "pwd", "discom", "collector", "sarkar",
+    "भजनलाल", "भजन लाल", "मुख्यमंत्री", "सीएम", "सरकार", "राजस्थान सरकार", "भाजपा", "बीजेपी",
+    "मोदी", "प्रधानमंत्री", "मंत्री", "मंत्रिमंडल", "प्रशासन", "दिया कुमारी", "दीया कुमारी",
+    "बैरवा", "वसुंधरा", "किरोड़ी", "दिलावर", "मदन राठौड़", "शेखावत", "डबल इंजन", "शासन", "सुशासन",
+    "पुलिस", "कलेक्टर", "विभाग", "बजट", "योजना",
+]
+
+OPP_TERMS = [
+    "congress", "inc", "incrajasthan", "incindia", "rahul gandhi", "priyanka gandhi", "kharge",
+    "gehlot", "ashok gehlot", "ashokgehlot51", "dotasra", "govinddotasra", "sachin pilot",
+    "sachinpilot", "tikaram jully", "tikaramjullyinc", "jully", "opposition", "beniwal",
+    "hanumanbeniwal", "rlp", "bap", "rajkumar roat", "roat_mla", "nsui", "iyc", "youth congress",
+    "कांग्रेस", "गहलोत", "अशोक गहलोत", "डोटासरा", "गोविंद सिंह डोटासरा", "सचिन पायलट", "पायलट",
+    "टीकाराम जूली", "जूली", "विपक्ष", "नेता प्रतिपक्ष", "बेनीवाल", "हनुमान बेनीवाल", "रालोपा",
+    "राहुल गांधी", "प्रियंका गांधी", "खड़गे", "राजकुमार रोत", "बीएपी", "एनएसयूआई", "यूथ कांग्रेस",
+]
+
+OPP_HANDLE_HINTS = [
+    "inc", "congress", "gehlot", "pilot", "dotasra", "jully", "beniwal", "rlp", "roat",
+    "nsui", "iyc", "youthcongress", "sewadal", "mahilacongress", "rahulgandhi", "priyankagandhi",
+]
+BJP_GOV_HANDLE_HINTS = [
+    "bjp", "rajcmo", "bhajanlal", "dipr", "kumaridiya", "prembairwa", "kirodilal",
+    "madandilawar", "madanrrathore", "vasundhara", "gssjodhpur", "bjym", "narendramodi",
+]
+
 STRONG_NEG = [
     "scam", "paper leak", "leak", "protest", "dharna", "ghotala", "bhrashtachar", "lathicharge",
     "corruption", "bribe", "allegation", "fraud", "boycott", "resign", "negligence", "mismanagement",
@@ -119,12 +159,13 @@ STRONG_NEG = [
     "पानी संकट", "लापरवाही", "धांधली", "फर्जीवाड़ा", "ठगी", "रिश्वत", "बेरोजगारी", "महंगाई", "इस्तीफा", "घेराव",
     "शर्मनाक", "बदहाल", "खस्ताहाल", "नाकाम", "नाकामी", "विफल", "विफलता", "निंदा", "आरोप", "जंगलराज",
     "अन्याय", "बर्बाद", "निकम्मा", "खोखले दावे", "फेल", "बहिष्कार", "लचर व्यवस्था", "जुमला", "धोखा", "छलावा",
+    "खराब", "बर्बादी", "ठप", "ध्वस्त", "गुंडाराज", "तानाशाही",
 ]
 MOD_NEG = [
     "delay", "delayed", "pending", "complaint", "problem", "trouble", "unsafe", "dispute", "controversy",
     "clash", "violence", "crime", "murder", "rape", "robbery", "traffic jam", "encroachment", "potholes",
     "देरी", "शिकायत", "समस्या", "परेशानी", "विवाद", "बवाल", "झड़प", "अपराध", "हत्या", "लूट", "चोरी",
-    "गड्ढे", "जाम", "अतिक्रमण", "गंदगी", "असुविधा", "खराब हालत", "चिंता", "सवाल उठे", "नाराज़",
+    "गड्ढे", "जाम", "अतिक्रमण", "गंदगी", "असुविधा", "खराब हालत", "चिंता", "सवाल उठे", "नाराज़", "कमी",
 ]
 INCIDENT_NEU = ["accident", "fire", "road accident", "died", "injured", "हादसा", "सड़क हादसा", "आग", "घायल", "मौत"]
 STRONG_POS = [
@@ -160,17 +201,14 @@ SARCASM_NEG_PHRASES = [
     r"(?:where\s*is\s*(?:development|governance|relief|jobs)|failed\s*(?:govt|government|cm)|wake\s*up\s*(?:govt|cm|rajcmo)|total\s*failure|hollow\s*promises)",
 ]
 ROUTINE_NEU_PHRASES = [
-    r"(?:समीक्षा\s*बैठक|बैठक\s*लेंगे|बैठक\s*की\s*अध्यक्षता|दौरे\s*पर\s*रहेंगे|तबादला\s*सूची|तबादले|मौसम\s*विभाग|तापमान|कार्यक्रम\s*प्रस्तावित|शेड्यूल|आज\s*दोपहर|आज\s*शाम)",
-    r"(?:review\s*meeting|to\s*chair\s*meeting|will\s*visit|transfer\s*list|weather\s*update|scheduled\s*to)",
+    r"(?:समीक्षा\s*बैठक|बैठक\s*लेंगे|बैठक\s*की\s*अध्यक्षता|दौरे\s*पर\s*रहेंगे|तबादला\s*सूची|तबादले|मौसम\s*विभाग|तापमान|कार्यक्रम\s*प्रस्तावित|शेड्यूल|आज\s*दोपहर|आज\s*शाम|जन्मदिन\s*की\s*हार्दिक|शुभकामनाएं|जयंती\s*पर\s*नमन|श्रद्धांजलि)",
+    r"(?:review\s*meeting|to\s*chair\s*meeting|will\s*visit|transfer\s*list|weather\s*update|scheduled\s*to|happy\s*birthday|tribute\s*to|condolences)",
 ]
 
-ATTACK = ["slams", "targets", "hits out", "questions", "blasts", "accuses", "corners",
-          "निशाना", "तंज", "आड़े हाथ", "कटघरे में", "हमला बोला", "सवाल उठाए", "घेरा", "बरसे", "पलटवार", "कटाक्ष"]
-GOV_TERMS = ["bhajanlal", "bhajan lal", "cmo", "rajcmo", "cm", "chief minister", "govt", "government",
-             "bjp", "minister", "diya kumari", "bairwa", "dilawar", "administration", "police",
-             "भजनलाल", "भजन लाल", "मुख्यमंत्री", "सरकार", "भाजपा", "मंत्री", "मंत्रिमंडल", "प्रशासन", "दिया कुमारी", "बैरवा", "दिलावर"]
-OPP_TERMS = ["congress", "gehlot", "ashok gehlot", "dotasra", "sachin pilot", "tikaram jully", "opposition", "beniwal",
-             "कांग्रेस", "गहलोत", "अशोक गहलोत", "डोटासरा", "सचिन पायलट", "टीकाराम जूली", "विपक्ष", "बेनीवाल"]
+ATTACK = [
+    "slams", "targets", "hits out", "questions", "blasts", "accuses", "corners", "criticizes", "attacks",
+    "निशाना", "तंज", "आड़े हाथ", "कटघरे में", "हमला बोला", "सवाल उठाए", "घेरा", "बरसे", "पलटवार", "कटाक्ष", "भड़के", "कोसा",
+]
 
 DISTRICTS = {
     "Jaipur": ["jaipur", "जयपुर", "jda"], "Jodhpur": ["jodhpur", "जोधपुर"],
@@ -222,7 +260,8 @@ def compile_terms(terms: List[str], full: bool = False) -> "re.Pattern":
 
 STRONG_NEG_RX, MOD_NEG_RX, INCIDENT_RX = compile_terms(STRONG_NEG), compile_terms(MOD_NEG), compile_terms(INCIDENT_NEU)
 STRONG_POS_RX, MOD_POS_RX = compile_terms(STRONG_POS), compile_terms(MOD_POS)
-ATTACK_RX, GOV_RX, OPP_RX = compile_terms(ATTACK), compile_terms(GOV_TERMS, full=True), compile_terms(OPP_TERMS, full=True)
+ATTACK_RX = compile_terms(ATTACK)
+GOV_RX, OPP_RX = compile_terms(GOV_BJP_TERMS, full=True), compile_terms(OPP_TERMS, full=True)
 ACTION_POS_RX = [re.compile(p, re.I) for p in ACTION_POSITIVE_PHRASES]
 SARCASM_NEG_RX = [re.compile(p, re.I) for p in SARCASM_NEG_PHRASES]
 ROUTINE_NEU_RX = [re.compile(p, re.I) for p in ROUTINE_NEU_PHRASES]
@@ -230,7 +269,9 @@ DISTRICT_RX = {d: compile_terms(t, full=True) for d, t in DISTRICTS.items()}
 DEPT_RX = {d: compile_terms(t, full=True) for d, t in DEPARTMENTS.items()}
 LEADER_RX = {ld["id"]: compile_terms(ld["terms"], full=True) for ld in LEADERS_CONFIG}
 
-# ---- Self-Learning Lexicon + Anti-Poisoning Guardrail ----
+# ============================================================================
+# SELF-LEARNING LEXICON + ANTI-WRONG-SUGGESTION GUARDRAIL + AUTO-MAINTENANCE
+# ============================================================================
 STOPWORDS = {
     "the", "and", "for", "with", "that", "this", "from", "have", "will", "been", "are", "was", "were",
     "not", "but", "you", "your", "his", "her", "our", "their", "has", "had", "into", "over", "after",
@@ -243,6 +284,7 @@ STOPWORDS = {
 LEARNED_LEXICON: Dict[str, Dict[str, Any]] = {}
 ITEM_OVERRIDES: Dict[str, Dict[str, Any]] = {}
 FEEDBACK_LOG: List[Dict[str, Any]] = []
+LAST_SELF_TUNE_TS: float = 0.0
 
 
 def extract_learning_tokens(text: str) -> List[str]:
@@ -284,100 +326,170 @@ def compute_learned_delta(text: str) -> Tuple[float, float, List[str]]:
     return max(-2.4, min(2.4, pol_delta)), min(1.8, neu_pull), hits[:3]
 
 
-def analyze_sentiment_base(text: str) -> Dict[str, Any]:
+def _author_camp(author: str, handle: str) -> str:
+    ah = f"{author or ''} {handle or ''}".lower()
+    if any(h in ah for h in BJP_GOV_HANDLE_HINTS):
+        return "BJP_GOVT"
+    if any(h in ah for h in OPP_HANDLE_HINTS):
+        return "OPPOSITION"
+    return "OTHER"
+
+
+def analyze_sentiment_base(text: str, author: str = "", handle: str = "") -> Dict[str, Any]:
     raw, low = text or "", (text or "").lower()
     reasons: List[str] = []
+
+    camp = _author_camp(author, handle)
+    gm = GOV_RX.search(low)
+    om = OPP_RX.search(low)
+    has_gov = bool(gm) or (camp == "BJP_GOVT")
+    has_opp = bool(om) or (camp == "OPPOSITION")
+
     s_neg, m_neg, inc = STRONG_NEG_RX.findall(low), MOD_NEG_RX.findall(low), INCIDENT_RX.findall(low)
     s_pos, m_pos = STRONG_POS_RX.findall(low), MOD_POS_RX.findall(low)
 
     neg_score = len(set(s_neg)) * 2.2 + len(set(m_neg)) * 1.0
     pos_score = len(set(s_pos)) * 2.0 + len(set(m_pos)) * 0.9
 
+    # RULE A: Opposition self-appreciation / non-BJP praise -> NEUTRAL
+    if camp == "OPPOSITION":
+        if not gm and neg_score < 2.0 and not ATTACK_RX.search(low):
+            return {
+                "label": "neutral", "risk": "INFO", "net": 0.0, "confidence": 91,
+                "reasons": ["opp-self-post->neutral"], "camp": camp, "opp_self_praise": True,
+            }
+        if (gm or ATTACK_RX.search(low) or neg_score >= 1.8) and not any(rx.search(low) for rx in ACTION_POS_RX):
+            neg_score += 2.2
+            pos_score *= 0.2
+            reasons.append("opp-handle-critique")
+        else:
+            return {
+                "label": "neutral", "risk": "INFO", "net": 0.0, "confidence": 86,
+                "reasons": ["opp-handle->neutral"], "camp": camp, "opp_self_praise": True,
+            }
+
+    if has_opp and not has_gov:
+        if ATTACK_RX.search(low) or any(rx.search(low) for rx in SARCASM_NEG_RX) or neg_score >= 2.2:
+            neg_score += 1.6
+            pos_score = 0.0
+            reasons.append("opp-attack-system")
+        else:
+            return {
+                "label": "neutral", "risk": "INFO", "net": 0.0, "confidence": 90,
+                "reasons": ["opp-self-praise->neutral"], "camp": camp, "opp_self_praise": True,
+            }
+
+    if not has_gov and not has_opp:
+        if pos_score > 0 and neg_score < 1.8:
+            return {
+                "label": "neutral", "risk": "INFO", "net": 0.0, "confidence": 82,
+                "reasons": ["non-govt-praise->neutral"], "camp": camp, "opp_self_praise": False,
+            }
+
+    # RULE B: Incidents, Govt Action Reversal, Sarcasm, Political Attack Direction
     if inc:
-        if GOV_RX.search(low) or s_neg:
+        if has_gov or s_neg:
             neg_score += len(set(inc)) * 1.1
             reasons.append("incident+admin")
         else:
             neg_score += 0.35
 
-    if any(rx.search(low) for rx in ACTION_POS_RX):
-        neg_score = max(0.0, neg_score - 3.6)
-        pos_score += 2.8
+    if has_gov and any(rx.search(low) for rx in ACTION_POS_RX):
+        neg_score = max(0.0, neg_score - 3.8)
+        pos_score += 3.0
         reasons.append("govt-action-reversal")
 
     if any(rx.search(low) for rx in SARCASM_NEG_RX):
-        pos_score = max(0.0, pos_score - 2.5)
-        neg_score += 3.4
+        pos_score = max(0.0, pos_score - 2.8)
+        neg_score += 3.6
         reasons.append("sarcasm/rhetoric")
 
     if ATTACK_RX.search(low):
-        gm, om = GOV_RX.search(low), OPP_RX.search(low)
         if gm and om:
             if gm.start() < om.start():
-                pos_score += 2.2
-                neg_score = max(0.0, neg_score - 2.5)
-                reasons.append("govt->opp-attack")
+                pos_score += 2.4
+                neg_score = max(0.0, neg_score - 2.6)
+                reasons.append("bjp->opp-attack")
             else:
-                neg_score += 2.8
-                reasons.append("opp->govt-attack")
+                neg_score += 3.0
+                pos_score *= 0.2
+                reasons.append("opp->bjp-attack")
         elif om and not gm:
-            neg_score += 1.6
+            neg_score += 1.8
             reasons.append("opp-criticism")
         elif gm:
-            neg_score += 1.0
+            neg_score += 1.5
             reasons.append("criticism-on-govt")
 
-    if "?" in raw and GOV_RX.search(low) and pos_score < 2.5:
-        neg_score += 0.9
+    if "?" in raw and has_gov and pos_score < 2.5:
+        neg_score += 1.0
         reasons.append("questioning-govt")
 
-    if any(rx.search(low) for rx in ROUTINE_NEU_RX) and neg_score < 2.0 and pos_score < 2.2:
-        neg_score *= 0.45
-        pos_score *= 0.45
-        reasons.append("routine-admin")
+    if any(rx.search(low) for rx in ROUTINE_NEU_RX) and neg_score < 2.0 and pos_score < 3.0:
+        neg_score *= 0.4
+        pos_score *= 0.35
+        reasons.append("routine/greeting")
 
     net = pos_score - neg_score
+    if net >= 1.6 and not has_gov:
+        net = 0.0
+        reasons.append("no-bjp-link->neutral")
+
     if s_neg:
         reasons.append("neg:" + ",".join(list(dict.fromkeys(s_neg))[:2]))
-    if s_pos:
+    if s_pos and has_gov:
         reasons.append("pos:" + ",".join(list(dict.fromkeys(s_pos))[:2]))
 
-    if net <= -1.6:
+    if net <= -1.5:
         label, risk = "negative", "ALERT"
-    elif net >= 1.6:
+    elif net >= 1.6 and has_gov:
         label, risk = "positive", "POSITIVE"
     else:
         label, risk = "neutral", "INFO"
 
     if label == "neutral":
-        conf = int(max(45, min(92, 85 - abs(net) * 20)))
+        conf = int(max(48, min(92, 85 - abs(net) * 18)))
     else:
-        conf = int(max(52, min(97, 58 + (abs(net) - 1.6) * 11 - min(pos_score, neg_score) * 5)))
+        conf = int(max(55, min(97, 60 + (abs(net) - 1.5) * 11 - min(pos_score, neg_score) * 4)))
 
-    return {"label": label, "risk": risk, "net": round(net, 2), "confidence": conf, "reasons": reasons[:4]}
+    return {
+        "label": label, "risk": risk, "net": round(net, 2), "confidence": conf,
+        "reasons": reasons[:4], "camp": camp, "opp_self_praise": False,
+    }
 
 
-def analyze_sentiment_full(text: str, item_id: str = "") -> Dict[str, Any]:
-    base = analyze_sentiment_base(text)
+def analyze_sentiment_full(text: str, item_id: str = "", author: str = "", handle: str = "") -> Dict[str, Any]:
+    base = analyze_sentiment_base(text, author=author, handle=handle)
+
     if item_id and item_id in ITEM_OVERRIDES:
         ov = ITEM_OVERRIDES[item_id]
         lbl = ov["sentiment"]
         risk = "ALERT" if lbl == "negative" else ("POSITIVE" if lbl == "positive" else "INFO")
         return {
             "sentiment": lbl, "risk": risk, "confidence": 65 if ov.get("flagged") else 99,
-            "reason": "User override (flagged conflict)" if ov.get("flagged") else "User trained",
+            "reason": "User override (⚠ conflict)" if ov.get("flagged") else "User trained",
             "user_corrected": True, "flagged_conflict": bool(ov.get("flagged")), "base": base,
         }
+
+    if base.get("opp_self_praise"):
+        return {
+            "sentiment": "neutral", "risk": "INFO", "confidence": base["confidence"],
+            "reason": " · ".join(base["reasons"][:2]), "user_corrected": False, "flagged_conflict": False, "base": base,
+        }
+
     pol_delta, neu_pull, learned_hits = compute_learned_delta(text)
     net = base["net"] + pol_delta
+    has_gov = bool(GOV_RX.search((text or "").lower())) or (base.get("camp") == "BJP_GOVT")
+
     if neu_pull >= 0.9 and abs(net) < 2.6:
         label, risk = "neutral", "INFO"
-    elif net <= -1.6:
+    elif net <= -1.5:
         label, risk = "negative", "ALERT"
-    elif net >= 1.6:
+    elif net >= 1.6 and has_gov:
         label, risk = "positive", "POSITIVE"
     else:
         label, risk = "neutral", "INFO"
+
     reasons = list(base["reasons"]) + learned_hits
     return {
         "sentiment": label, "risk": risk, "confidence": base["confidence"],
@@ -464,7 +576,7 @@ def parse_timestamp(val: Any) -> Optional[float]:
 
 def enrich_item(item: Dict[str, Any]) -> Dict[str, Any]:
     text = clean_text(item.get("text", ""))
-    res = analyze_sentiment_full(text, item_id=item.get("id", ""))
+    res = analyze_sentiment_full(text, item_id=item.get("id", ""), author=item.get("author", ""), handle=item.get("handle", ""))
     dt_ist = datetime.fromtimestamp(float(item["ts"]), tz=IST)
     item.update({
         "text": text, "sentiment": res["sentiment"], "risk": res["risk"],
@@ -601,6 +713,26 @@ def reevaluate_all_stores():
         record_daily_tracker(updated, today_str)
 
 
+def self_tune_lexicon():
+    global LAST_SELF_TUNE_TS
+    now = time.time()
+    to_drop = []
+    for tok, rec in LEARNED_LEXICON.items():
+        p, n, u = float(rec.get("positive", 0)), float(rec.get("negative", 0)), float(rec.get("neutral", 0))
+        tot = p + n + u
+        rec["positive"], rec["negative"], rec["neutral"] = round(p * 0.96, 2), round(n * 0.96, 2), round(u * 0.96, 2)
+        if tot >= 1.5 and max(p, n, u) / tot < 0.45 and int(rec.get("samples", 0)) < 4:
+            to_drop.append(tok)
+        elif (p + n + u) < 0.25:
+            to_drop.append(tok)
+    for tok in to_drop:
+        LEARNED_LEXICON.pop(tok, None)
+    LAST_SELF_TUNE_TS = now
+    if to_drop:
+        reevaluate_all_stores()
+        mark_dirty()
+
+
 async def _kv_get() -> Optional[str]:
     if UPSTASH_URL and UPSTASH_TOKEN:
         try:
@@ -676,9 +808,13 @@ async def save_state(force: bool = False):
 
 
 async def autosave_loop():
+    ticks = 0
     while True:
         await asyncio.sleep(90)
+        ticks += 1
         try:
+            if ticks % 20 == 0:
+                self_tune_lexicon()
             await save_state()
         except Exception as e:
             log.warning("autosave: %s", e)
@@ -1056,10 +1192,12 @@ async def get_tv(force: bool):
     return await swr("tv", 300, factory, force=force, min_gap=45)
 
 
-# ---- Self-Learning Feedback & Guardrail Endpoints ----
+# ---- Self-Learning Suggestion & Anti-Wrong-Mark Endpoints ----
 class FeedbackReq(BaseModel):
     item_id: str
     text: str = ""
+    author: str = ""
+    handle: str = ""
     target_sentiment: str
     confirm_override: bool = False
 
@@ -1078,37 +1216,42 @@ async def submit_feedback(req: FeedbackReq):
         raise HTTPException(400, "target_sentiment positive/negative/neutral hona chahiye")
     item = _find_item(req.item_id)
     text = clean_text(item["text"] if item else req.text)
+    author = item.get("author", "") if item else req.author
+    handle = item.get("handle", "") if item else req.handle
     if not text:
         raise HTTPException(404, "Post nahi mila")
 
-    base = analyze_sentiment_base(text)
+    base = analyze_sentiment_base(text, author=author, handle=handle)
     base_label, base_conf = base["label"], base["confidence"]
+    opp_self_conflict = bool(base.get("opp_self_praise")) and target == "positive"
     is_opposite = (base_label == "negative" and target == "positive") or (base_label == "positive" and target == "negative")
-    suspicious = is_opposite and base_conf >= 72
+    suspicious = opp_self_conflict or (is_opposite and base_conf >= 72)
 
     if suspicious and not req.confirm_override:
-        return {
-            "status": "warning", "requires_confirm": True, "base_label": base_label,
-            "base_confidence": base_conf, "reasons": base["reasons"],
-            "message": f"AI Check Warning: Is post mein strong {base_label.upper()} signals hain ({', '.join(base['reasons'][:2]) or 'clear polarity'}, {base_conf}% confidence). Galti se click hua ho to Cancel karein; pakka {target.upper()} hai to Confirm karein.",
-        }
+        warn_msg = (
+            "AI Guardrail Warning: Yeh post Congress/Opposition ka self-praise lag raha hai — BJP tracker ke hisaab se yeh NEUTRAL hona chahiye, Positive nahi. Phir bhi Positive mark karna hai?"
+            if opp_self_conflict else
+            f"AI Guardrail Warning: Is post mein strong {base_label.upper()} signals hain ({', '.join(base['reasons'][:2]) or 'clear polarity'}, {base_conf}% confidence). Agar galti se click hua ho to Cancel karein; pakka {target.upper()} hai to Confirm karein."
+        )
+        return {"status": "warning", "requires_confirm": True, "base_label": base_label, "base_confidence": base_conf, "message": warn_msg}
 
     ITEM_OVERRIDES[req.item_id] = {"sentiment": target, "by_user": True, "flagged": suspicious, "ts": time.time()}
     if len(ITEM_OVERRIDES) > 600:
         for k in sorted(ITEM_OVERRIDES, key=lambda x: ITEM_OVERRIDES[x].get("ts", 0))[:100]:
             ITEM_OVERRIDES.pop(k, None)
 
-    weight = 0.25 if suspicious else 1.0
+    weight = 0.2 if suspicious else 1.0
     learned_tokens = extract_learning_tokens(text)
-    for tok in learned_tokens[:12]:
-        rec = LEARNED_LEXICON.setdefault(tok, {"positive": 0.0, "negative": 0.0, "neutral": 0.0, "samples": 0, "quarantined": 0})
-        rec[target] = round(float(rec.get(target, 0.0)) + weight, 2)
-        if suspicious:
-            rec["quarantined"] = int(rec.get("quarantined", 0)) + 1
-            if rec["quarantined"] >= 2:
+    if not opp_self_conflict:
+        for tok in learned_tokens[:12]:
+            rec = LEARNED_LEXICON.setdefault(tok, {"positive": 0.0, "negative": 0.0, "neutral": 0.0, "samples": 0, "quarantined": 0})
+            rec[target] = round(float(rec.get(target, 0.0)) + weight, 2)
+            if suspicious:
+                rec["quarantined"] = int(rec.get("quarantined", 0)) + 1
+                if rec["quarantined"] >= 2:
+                    rec["samples"] = int(rec.get("samples", 0)) + 1
+            else:
                 rec["samples"] = int(rec.get("samples", 0)) + 1
-        else:
-            rec["samples"] = int(rec.get("samples", 0)) + 1
 
     if len(LEARNED_LEXICON) > 500:
         for wk in sorted(LEARNED_LEXICON, key=lambda k: LEARNED_LEXICON[k].get("samples", 0))[:100]:
@@ -1124,9 +1267,9 @@ async def submit_feedback(req: FeedbackReq):
         "status": "overridden_quarantined" if suspicious else "learned",
         "flagged": suspicious, "learned_tokens": learned_tokens[:5],
         "message": (
-            f"Post {target.upper()} mein shift ho gaya (conflict detect hua tha isliye global learning quarantine mein hai)."
+            f"Post {target.upper()} mein shift ho gaya (AI conflict tha isliye global model ko safe/quarantine rakha gaya)."
             if suspicious else
-            f"Seekh liya! Post {target.upper()} mein shift ho gaya aur agle scans mein aise posts auto-{target.upper()} honge."
+            f"AI ne seekh liya! Post {target.upper()} mein shift ho gaya aur agle scans mein aise posts automatically {target.upper()} honge."
         ),
     }
 
@@ -1137,7 +1280,13 @@ async def get_learning_stats():
         [{"token": k, **v} for k, v in LEARNED_LEXICON.items() if v.get("samples", 0) > 0],
         key=lambda x: (x["samples"], x["positive"] + x["negative"] + x["neutral"]), reverse=True,
     )[:40]
-    return {"total_learned_tokens": len(LEARNED_LEXICON), "total_overrides": len(ITEM_OVERRIDES), "top_tokens": top_tokens, "recent_feedback": list(reversed(FEEDBACK_LOG[-20:]))}
+    return {
+        "total_learned_tokens": len(LEARNED_LEXICON),
+        "total_overrides": len(ITEM_OVERRIDES),
+        "last_self_tune": LAST_SELF_TUNE_TS,
+        "top_tokens": top_tokens,
+        "recent_feedback": list(reversed(FEEDBACK_LOG[-20:])),
+    }
 
 
 @app.delete("/api/learning/{token}", dependencies=[Depends(require_key)])
@@ -1401,12 +1550,13 @@ async def api_feed(keywords: str = Query(default=",".join(DEFAULT_KEYWORDS)), fo
         handles_list.append(st)
     handles_list.sort(key=lambda h: (h["total"], h["negative"]), reverse=True)
 
-    # ---- Prominent Leaders & CMO Twitter Tracker ----
+    # ---- Internet-Wide Prominent Leaders Buzz (Always calculated across X + Media, despite user filter!) ----
     leader_map = {
         ld["id"]: {
             "id": ld["id"], "name": ld["name"], "role": ld["role"], "party": ld["party"], "handle": ld["handle"],
-            "x_total": 0, "x_positive": 0, "x_negative": 0, "x_neutral": 0, "media_total": 0, "likes": 0, "retweets": 0,
-            "_dept": {}, "_tags": {}, "_h_pos": mk(), "_h_neg": mk(), "_h_neu": mk(), "latest_tweet": None,
+            "x_total": 0, "x_positive": 0, "x_negative": 0, "x_neutral": 0,
+            "media_total": 0, "total_buzz": 0, "total_positive": 0, "total_negative": 0, "total_neutral": 0,
+            "likes": 0, "retweets": 0, "_dept": {}, "_tags": {}, "_h_pos": mk(), "_h_neg": mk(), "_h_neu": mk(), "latest_tweet": None,
         }
         for ld in LEADERS_CONFIG
     }
@@ -1415,6 +1565,8 @@ async def api_feed(keywords: str = Query(default=",".join(DEFAULT_KEYWORDS)), fo
             row = leader_map.get(lid)
             if not row:
                 continue
+            row["total_buzz"] += 1
+            row[f"total_{it['sentiment']}"] += 1
             if it["source"] == "X":
                 row["x_total"] += 1
                 row[f"x_{it['sentiment']}"] += 1
@@ -1453,7 +1605,7 @@ async def api_feed(keywords: str = Query(default=",".join(DEFAULT_KEYWORDS)), fo
         hp, hn, hu = row.pop("_h_pos"), row.pop("_h_neg"), row.pop("_h_neu")
         row["hourly_x"] = {"labels": [f"{h:02d}:00" for h in hours], "positive": [hp[h] for h in hours], "negative": [hn[h] for h in hours], "neutral": [hu[h] for h in hours]}
         leaders_list.append(row)
-    leaders_list.sort(key=lambda x: (x["x_total"], x["media_total"]), reverse=True)
+    leaders_list.sort(key=lambda x: (x["total_buzz"], x["x_total"]), reverse=True)
 
     total = max(len(deduped), 1)
     pct = lambda n: round(n / total * 100, 1)  # noqa: E731
