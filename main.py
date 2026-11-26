@@ -64,10 +64,15 @@ YOUTUBE_CHANNELS = [
     ("Zee Rajasthan", "UCfnvGSUXKIuaCv-9E9a2UJg"),
     ("News18 Rajasthan", "UC7FlLbNo66YsCEAPuJITiNg"),
 ]
+def _gn_site(domain: str) -> str:
+    q = urllib.parse.quote(f"site:{domain} राजस्थान when:1d")
+    return f"https://news.google.com/rss/search?q={q}&hl=hi&gl=IN&ceid=IN:hi"
+
+
 NEWSPAPER_FEEDS = [
-    ("Dainik Bhaskar", "https://feeds.bhaskar.com/rajasthan/"),
-    ("Rajasthan Patrika", "https://www.patrika.com/rss/rajasthan/"),
-    ("Zee News Rajasthan", "https://zeenews.india.com/rss/india/rajasthan.xml"),
+    ("Dainik Bhaskar", _gn_site("bhaskar.com")),
+    ("Rajasthan Patrika", _gn_site("patrika.com")),
+    ("Zee News Rajasthan", _gn_site("zeenews.india.com")),
 ] + parse_feed_env("PAPER_FEEDS")
 EXTRA_FEEDS = parse_feed_env("EXTRA_RSS")  # "FB:Naam|url" -> Facebook, "IG:Naam|url" -> Instagram
 
@@ -688,6 +693,8 @@ async def _read_rss(name: str, url: str, source: str, limit: int = 12) -> List[D
     out = []
     for e in feed.entries[:limit]:
         title = clean_text(e.get("title", ""))
+                if "news.google.com" in url and " - " in title:
+            title = title.rsplit(" - ", 1)[0].strip()
         if not title:
             continue
         link = e.get("link", "")
@@ -771,26 +778,58 @@ async def get_youtube(force: bool):
 
 async def get_tv(force: bool):
     async def factory():
-        async def one(name, cid):
-            vid = None
+        yt_items = await get_youtube(False)
+
+        async def probe(vid: str):
+            """watch page देखकर पता करो: live है? embed हो सकता है?"""
             try:
-                r = await HTTP.get(f"https://www.youtube.com/channel/{cid}/live",
+                r = await HTTP.get(f"https://www.youtube.com/watch?v={vid}",
                                    headers=YT_LIVE_HEADERS, timeout=7)
-                m = re.search(r'<link rel="canonical" href="https://www\.youtube\.com/watch\?v=([A-Za-z0-9_-]{11})"', r.text)
-                vid = m.group(1) if m else None  # canonical sirf tab watch?v= hota hai jab sach me live ho
-                health_ok(f"TV {name}", 1 if vid else 0)
-            except Exception as e:
-                health_fail(f"TV {name}", e)
-            embed = (f"https://www.youtube.com/embed/{vid}?autoplay=1&mute=1&rel=0" if vid
-                     else f"https://www.youtube.com/embed/live_stream?channel={cid}&autoplay=1&mute=1")
-            return {"source": name, "is_live": bool(vid), "embed_url": embed,
-                    "thumb": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if vid else "",
-                    "watch_url": f"https://www.youtube.com/watch?v={vid}" if vid
-                    else f"https://www.youtube.com/channel/{cid}/live"}
+                t = r.text
+                live = bool(re.search(r'"isLiveNow"\s*:\s*true', t))
+                emb = bool(re.search(r'"playableInEmbed"\s*:\s*true', t))
+                return live, emb
+            except Exception:
+                return False, False
+
+        async def one(name, cid):
+            vid, embeddable = None, False
+            cands = [i["video_id"] for i in sorted(yt_items, key=lambda x: x["ts"], reverse=True)
+                     if i.get("author") == name and i.get("video_id")][:6]
+            if cands:
+                results = await asyncio.gather(*(probe(v) for v in cands))
+                for v, (live, emb) in zip(cands, results):
+                    if live:
+                        vid, embeddable = v, emb
+                        break
+            if not vid:
+                try:
+                    r = await HTTP.get(f"https://www.youtube.com/channel/{cid}/live",
+                                       headers=YT_LIVE_HEADERS, timeout=7)
+                    m = re.search(r'<link rel="canonical" href="https://www\.youtube\.com/watch\?v=([A-Za-z0-9_-]{11})"', r.text)
+                    if m:
+                        vid = m.group(1)
+                        _, embeddable = await probe(vid)
+                except Exception as e:
+                    health_fail(f"TV {name}", e)
+            if vid:
+                health_ok(f"TV {name}", 1)
+            if vid and embeddable:
+                embed = f"https://www.youtube.com/embed/{vid}?autoplay=1&mute=1&rel=0"
+            elif vid:
+                embed = ""   # embed मना है: सिर्फ़ YouTube पर खोलने का बटन दिखेगा
+            else:
+                embed = f"https://www.youtube.com/embed/live_stream?channel={cid}&autoplay=1&mute=1"
+            return {
+                "source": name, "is_live": bool(vid), "embed_url": embed,
+                "thumb": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if vid else "",
+                "watch_url": f"https://www.youtube.com/watch?v={vid}" if vid
+                else f"https://www.youtube.com/channel/{cid}/live",
+            }
 
         return list(await asyncio.gather(*(one(n, c) for n, c in YOUTUBE_CHANNELS)))
 
-    return await swr("tv", 300, factory, force=force, min_gap=60)
+    return await swr("tv", 180, factory, force=force, min_gap=60)
 
 
 # ----------------------------------------------------------------------------
