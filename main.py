@@ -13,7 +13,7 @@ import urllib.parse
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, Tuple
 
 import feedparser
 import httpx
@@ -40,8 +40,14 @@ DEFAULT_KEYWORDS = ["Bhajanlal", "RajCMO", "Rajasthan govt", "Jaipur", "paper le
 ACCESS_KEY = os.getenv("CIU_ACCESS_KEY", "").strip()
 UPSTASH_URL = os.getenv("UPSTASH_REDIS_REST_URL", "").strip().rstrip("/")
 UPSTASH_TOKEN = os.getenv("UPSTASH_REDIS_REST_TOKEN", "").strip()
-STATE_KEY = "ciuwatch:state:v4"
-STATE_FILE = Path(tempfile.gettempdir()) / "ciuwatch_state_v4.json"
+
+# Stable multi-day Upstash schema (never wipes history on future code updates!)
+META_KEY = "ciuwatch:meta:v1"
+DAY_KEY_PREFIX = "ciuwatch:day:"
+LEGACY_STATE_KEYS = ["ciuwatch:state:v4", "ciuwatch:state:v3"]
+RETENTION_DAYS = max(2, min(7, int(os.getenv("RETENTION_DAYS", "3"))))
+DAY_TTL_SECONDS = (RETENTION_DAYS + 1) * 86400  # 4 days TTL for 3 full days of history
+STATE_DIR = Path(tempfile.gettempdir()) / "ciuwatch_store"
 BG_COLLECT_INTERVAL = max(45, int(os.getenv("BG_COLLECT_SECONDS", "60")))
 
 
@@ -351,7 +357,6 @@ def analyze_sentiment_base(text: str, author: str = "", handle: str = "") -> Dic
     neg_score = len(set(s_neg)) * 2.2 + len(set(m_neg)) * 1.0
     pos_score = len(set(s_pos)) * 2.0 + len(set(m_pos)) * 0.9
 
-    # RULE A: Opposition self-appreciation / non-BJP praise -> NEUTRAL
     if camp == "OPPOSITION":
         if not gm and neg_score < 2.0 and not ATTACK_RX.search(low):
             return {
@@ -386,7 +391,6 @@ def analyze_sentiment_base(text: str, author: str = "", handle: str = "") -> Dic
                 "reasons": ["non-govt-praise->neutral"], "camp": camp, "opp_self_praise": False,
             }
 
-    # RULE B: Incidents, Govt Action Reversal, Sarcasm, Political Attack Direction
     if inc:
         if has_gov or s_neg:
             neg_score += len(set(inc)) * 1.1
@@ -532,8 +536,8 @@ FIRST_SEEN: Dict[str, float] = {}
 
 
 def first_seen(id_: str) -> float:
-    if len(FIRST_SEEN) > 4000:
-        for k in list(FIRST_SEEN)[:1000]:
+    if len(FIRST_SEEN) > 5000:
+        for k in list(FIRST_SEEN)[:1500]:
             FIRST_SEEN.pop(k, None)
     return FIRST_SEEN.setdefault(id_, time.time())
 
@@ -628,12 +632,13 @@ def sanitize_keywords(raw: str) -> List[str]:
     return out[:10]
 
 
-# ---- State & Persistence ----
+# ============================================================================
+# MULTI-DAY PARTITIONED STATE & UPSTASH PERSISTENCE (3+ DAYS HISTORY!)
+# ============================================================================
 HTTP: Optional[httpx.AsyncClient] = None
-LIVE_TWEET_STORE: Dict[str, Dict[str, Any]] = {}
-LIVE_MEDIA_STORE: Dict[str, Dict[str, Any]] = {}
+# DAY_STORES[date_ist] = {"tweets": {id: item}, "media": {id: item}, "daily": {id: graph_rec}}
+DAY_STORES: Dict[str, Dict[str, Dict[str, Any]]] = {}
 MANUAL_STORE: Dict[str, Dict[str, Any]] = {}
-DAILY_TRACKER: Dict[str, Any] = {"date": "", "items": {}}
 ACTIVE_KEYWORDS: List[str] = list(DEFAULT_KEYWORDS)
 CACHE: Dict[str, Dict[str, Any]] = {}
 LOCKS: Dict[str, asyncio.Lock] = {}
@@ -641,12 +646,29 @@ BG_TASKS: set = set()
 SOURCE_HEALTH: Dict[str, Dict[str, Any]] = {}
 X_CLIENTS: Dict[int, Any] = {}
 X_COOLDOWN: Dict[int, Tuple[float, bool]] = {}
-cookie_turn, _dirty = 0, False
+cookie_turn = 0
+_dirty_meta = False
+_dirty_days: Set[str] = set()
+_backfill_done_dates: Set[str] = set()
 
 
-def mark_dirty():
-    global _dirty
-    _dirty = True
+def _recent_dates(days: int = RETENTION_DAYS) -> List[str]:
+    now_ist = datetime.now(IST)
+    return [(now_ist - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days)]
+
+
+def _day_bucket(date_str: str) -> Dict[str, Dict[str, Any]]:
+    return DAY_STORES.setdefault(date_str, {"tweets": {}, "media": {}, "daily": {}})
+
+
+def mark_meta_dirty():
+    global _dirty_meta
+    _dirty_meta = True
+
+
+def mark_day_dirty(date_str: str):
+    if date_str:
+        _dirty_days.add(date_str)
 
 
 def health_ok(name: str, count: int):
@@ -656,61 +678,78 @@ def health_ok(name: str, count: int):
 
 def health_fail(name: str, err: Any):
     prev = SOURCE_HEALTH.get(name, {})
-    SOURCE_HEALTH[name] = {"ok": False, "ts": time.time(), "last_ok": prev.get("last_ok", 0), "count": 0, "error": (str(err) or repr(err))[:140]}
+    SOURCE_HEALTH[name] = {
+        "ok": False, "ts": time.time(), "last_ok": prev.get("last_ok", 0),
+        "count": 0, "error": (str(err) or repr(err))[:140],
+    }
 
 
-def record_media_items(items: List[Dict[str, Any]], now_ts: float):
-    cutoff, changed = now_ts - 86400, False
+def _daily_rec(it: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "hour": it["hour_ist"], "sentiment": it["sentiment"], "source": it["source"],
+        "leaders": it.get("leaders", []), "district": it.get("district", "Statewide"),
+        "department": it.get("department", "General / Admin"),
+        "hay": f"{it.get('text', '')[:180]} {it.get('author', '')} {it.get('handle', '')}".lower(),
+    }
+
+
+def ingest_items(items: List[Dict[str, Any]]):
+    """Stores tweets, media & hourly graph records into their exact IST date bucket (retains 3+ days)."""
+    if not items:
+        return
+    min_date = (datetime.now(IST) - timedelta(days=RETENTION_DAYS)).strftime("%Y-%m-%d")
     for it in items:
-        if it.get("ts", 0) < cutoff:
+        d = it.get("date_ist")
+        if not d or d < min_date:
             continue
-        old = LIVE_MEDIA_STORE.get(it["id"])
+        b = _day_bucket(d)
+        target = b["tweets"] if it.get("source") == "X" else b["media"]
+        old = target.get(it["id"])
         if old:
-            it["ingested_at"] = old.get("ingested_at", it.get("ingested_at", now_ts))
-        else:
-            changed = True
-        LIVE_MEDIA_STORE[it["id"]] = it
-    for mid in [k for k, v in LIVE_MEDIA_STORE.items() if v.get("ts", 0) < cutoff]:
-        LIVE_MEDIA_STORE.pop(mid, None)
-    if len(LIVE_MEDIA_STORE) > 400:
-        for mid in sorted(LIVE_MEDIA_STORE, key=lambda k: LIVE_MEDIA_STORE[k].get("ts", 0))[:len(LIVE_MEDIA_STORE) - 400]:
-            LIVE_MEDIA_STORE.pop(mid, None)
-    if changed:
-        mark_dirty()
+            if it.get("source") == "X":
+                it["kws"] = sorted(set(old.get("kws", [])) | set(it.get("kws", [])))
+            it["ingested_at"] = old.get("ingested_at", it.get("ingested_at", time.time()))
+        target[it["id"]] = it
+        rec = _daily_rec(it)
+        if b["daily"].get(it["id"]) != rec or not old:
+            b["daily"][it["id"]] = rec
+            mark_day_dirty(d)
 
-
-def record_daily_tracker(items: List[Dict[str, Any]], today_str: str):
-    if DAILY_TRACKER["date"] != today_str:
-        DAILY_TRACKER["date"], DAILY_TRACKER["items"] = today_str, {}
-        mark_dirty()
-    changed = False
-    for it in items:
-        if it.get("date_ist") == today_str:
-            rec = {
-                "hour": it["hour_ist"], "sentiment": it["sentiment"], "source": it["source"],
-                "leaders": it.get("leaders", []), "district": it.get("district", "Statewide"),
-                "department": it.get("department", "General / Admin"),
-                "hay": f"{it.get('text', '')[:180]} {it.get('author', '')} {it.get('handle', '')}".lower(),
-            }
-            if DAILY_TRACKER["items"].get(it["id"]) != rec:
-                DAILY_TRACKER["items"][it["id"]] = rec
-                changed = True
-    if len(DAILY_TRACKER["items"]) > 1800:
-        for k in list(DAILY_TRACKER["items"])[:300]:
-            DAILY_TRACKER["items"].pop(k, None)
-    if changed:
-        mark_dirty()
+    # Cap per-day buckets safely so each day fits comfortably inside Upstash 1MB key limit
+    for d, b in list(DAY_STORES.items()):
+        if d < min_date:
+            DAY_STORES.pop(d, None)
+            continue
+        if len(b["tweets"]) > 750:
+            for k in sorted(b["tweets"], key=lambda x: b["tweets"][x].get("ts", 0))[:len(b["tweets"]) - 750]:
+                b["tweets"].pop(k, None)
+        if len(b["media"]) > 450:
+            for k in sorted(b["media"], key=lambda x: b["media"][x].get("ts", 0))[:len(b["media"]) - 450]:
+                b["media"].pop(k, None)
+        if len(b["daily"]) > 2200:
+            for k in list(b["daily"])[:400]:
+                b["daily"].pop(k, None)
 
 
 def reevaluate_all_stores():
-    today_str = datetime.now(IST).strftime("%Y-%m-%d")
-    updated = []
-    for store in (LIVE_TWEET_STORE, LIVE_MEDIA_STORE, MANUAL_STORE):
-        for item in store.values():
-            enrich_item(item)
-            updated.append(item)
-    if updated:
-        record_daily_tracker(updated, today_str)
+    for d, b in DAY_STORES.items():
+        changed = False
+        for sub in ("tweets", "media"):
+            for it in b[sub].values():
+                enrich_item(it)
+                rec = _daily_rec(it)
+                if b["daily"].get(it["id"]) != rec:
+                    b["daily"][it["id"]] = rec
+                    changed = True
+        if changed:
+            mark_day_dirty(d)
+    for it in MANUAL_STORE.values():
+        enrich_item(it)
+        d = it.get("date_ist")
+        if d:
+            b = _day_bucket(d)
+            b["daily"][it["id"]] = _daily_rec(it)
+            mark_day_dirty(d)
 
 
 def self_tune_lexicon():
@@ -730,90 +769,218 @@ def self_tune_lexicon():
     LAST_SELF_TUNE_TS = now
     if to_drop:
         reevaluate_all_stores()
-        mark_dirty()
+        mark_meta_dirty()
 
 
-async def _kv_get() -> Optional[str]:
+# ---- Upstash / Local Disk Key-Value Helpers ----
+async def _kv_get_key(key: str) -> Optional[str]:
     if UPSTASH_URL and UPSTASH_TOKEN:
         try:
-            r = await HTTP.post(UPSTASH_URL, headers={"Authorization": f"Bearer {UPSTASH_TOKEN}"}, json=["GET", STATE_KEY], timeout=8)
+            r = await HTTP.post(UPSTASH_URL, headers={"Authorization": f"Bearer {UPSTASH_TOKEN}"}, json=["GET", key], timeout=8)
+            r.raise_for_status()
             return r.json().get("result")
         except Exception as e:
-            log.warning("Upstash GET fail: %s", e)
+            health_fail("Upstash DB", e)
+            log.warning("Upstash GET %s fail: %s", key, e)
             return None
     try:
-        return STATE_FILE.read_text(encoding="utf-8") if STATE_FILE.exists() else None
+        p = STATE_DIR / (re.sub(r"[^a-zA-Z0-9_.-]+", "_", key) + ".json")
+        return p.read_text(encoding="utf-8") if p.exists() else None
     except Exception:
         return None
 
 
-async def _kv_set(val: str):
+async def _kv_set_key(key: str, val: str, ttl: int = 604800) -> bool:
     if UPSTASH_URL and UPSTASH_TOKEN:
         try:
-            await HTTP.post(UPSTASH_URL, headers={"Authorization": f"Bearer {UPSTASH_TOKEN}"}, json=["SET", STATE_KEY, val, "EX", 604800], timeout=8)
+            r = await HTTP.post(UPSTASH_URL, headers={"Authorization": f"Bearer {UPSTASH_TOKEN}"}, json=["SET", key, val, "EX", ttl], timeout=10)
+            r.raise_for_status()
+            return True
         except Exception as e:
-            log.warning("Upstash SET fail: %s", e)
-        return
+            health_fail("Upstash DB", e)
+            log.warning("Upstash SET %s fail: %s", key, e)
+            return False
     try:
-        STATE_FILE.write_text(val, encoding="utf-8")
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        p = STATE_DIR / (re.sub(r"[^a-zA-Z0-9_.-]+", "_", key) + ".json")
+        p.write_text(val, encoding="utf-8")
+        return True
     except Exception:
-        pass
+        return False
+
+
+def _merge_legacy_blob(data: Dict[str, Any]):
+    """Safely migrates existing tweets, media, daily graphs & AI brain from v3/v4 keys without losing anything."""
+    for k, v in (data.get("learned") or {}).items():
+        if k not in LEARNED_LEXICON:
+            LEARNED_LEXICON[k] = v
+    for k, v in (data.get("overrides") or {}).items():
+        if k not in ITEM_OVERRIDES:
+            ITEM_OVERRIDES[k] = v
+    if isinstance(data.get("feedback_log"), list) and not FEEDBACK_LOG:
+        FEEDBACK_LOG[:] = data["feedback_log"][-100:]
+    for k, v in (data.get("manual") or {}).items():
+        if k not in MANUAL_STORE:
+            MANUAL_STORE[k] = v
+    if isinstance(data.get("keywords"), list) and data["keywords"] and ACTIVE_KEYWORDS == DEFAULT_KEYWORDS:
+        ACTIVE_KEYWORDS[:] = data["keywords"][:10]
+
+    # Migrate tweets & media into exact IST day buckets
+    migrated: List[Dict[str, Any]] = []
+    for sub in ("tweets", "media"):
+        for it in (data.get(sub) or {}).values():
+            if isinstance(it, dict) and it.get("id") and it.get("ts"):
+                enrich_item(it)
+                migrated.append(it)
+    if migrated:
+        ingest_items(migrated)
+
+    # Migrate daily graph tracker items (preserves hours even if raw tweet was trimmed earlier!)
+    d_obj = data.get("daily") or {}
+    d_date = d_obj.get("date", "")
+    d_items = d_obj.get("items") or {}
+    if d_date and isinstance(d_items, dict) and d_items:
+        b = _day_bucket(d_date)
+        for iid, rec in d_items.items():
+            if iid not in b["daily"]:
+                b["daily"][iid] = rec
+        mark_day_dirty(d_date)
 
 
 async def load_state():
-    raw = await _kv_get()
+    """Loads meta + last RETENTION_DAYS from Upstash, AND auto-migrates legacy v4/v3 keys on first boot."""
+    meta_raw = await _kv_get_key(META_KEY)
+    if meta_raw:
+        try:
+            m = json.loads(meta_raw)
+            LEARNED_LEXICON.update(m.get("learned") or {})
+            ITEM_OVERRIDES.update(m.get("overrides") or {})
+            if isinstance(m.get("feedback_log"), list):
+                FEEDBACK_LOG[:] = m["feedback_log"][-100:]
+            MANUAL_STORE.update(m.get("manual") or {})
+            if isinstance(m.get("keywords"), list) and m["keywords"]:
+                ACTIVE_KEYWORDS[:] = m["keywords"][:10]
+        except Exception as e:
+            log.warning("Meta load fail: %s", e)
+
+    dates = _recent_dates(RETENTION_DAYS)
+    day_raws = await asyncio.gather(*(_kv_get_key(DAY_KEY_PREFIX + d) for d in dates))
+    loaded_days = 0
+    for d, raw in zip(dates, day_raws):
+        if not raw:
+            continue
+        try:
+            obj = json.loads(raw)
+            b = _day_bucket(d)
+            b["tweets"].update(obj.get("tweets") or {})
+            b["media"].update(obj.get("media") or {})
+            b["daily"].update(obj.get("daily") or {})
+            loaded_days += 1
+        except Exception as e:
+            log.warning("Day %s load fail: %s", d, e)
+
+    # Auto-migrate from legacy v4 / v3 keys so updating code NEVER loses your earlier tweets or graph!
+    legacy_raws = await asyncio.gather(*(_kv_get_key(k) for k in LEGACY_STATE_KEYS))
+    migrated_any = False
+    for raw in legacy_raws:
+        if not raw:
+            continue
+        try:
+            _merge_legacy_blob(json.loads(raw))
+            migrated_any = True
+        except Exception as e:
+            log.warning("Legacy migrate fail: %s", e)
+
+    reevaluate_all_stores()
+    total_tw = sum(len(b["tweets"]) for b in DAY_STORES.values())
+    total_md = sum(len(b["media"]) for b in DAY_STORES.values())
+    if UPSTASH_URL and UPSTASH_TOKEN:
+        health_ok("Upstash DB", total_tw + total_md)
+    if migrated_any:
+        mark_meta_dirty()
+        await save_state(force=True)
+    log.info("Loaded %d days (%d tweets, %d media, %d learned tokens)",
+             len(DAY_STORES), total_tw, total_md, len(LEARNED_LEXICON))
+
+
+async def ensure_day_loaded(date_str: str):
+    """On-demand load for older dates picked from calendar if still in Upstash."""
+    if date_str in DAY_STORES and (DAY_STORES[date_str]["tweets"] or DAY_STORES[date_str]["daily"]):
+        return
+    raw = await _kv_get_key(DAY_KEY_PREFIX + date_str)
     if not raw:
         return
     try:
-        data = json.loads(raw)
-        LEARNED_LEXICON.update(data.get("learned") or {})
-        ITEM_OVERRIDES.update(data.get("overrides") or {})
-        if isinstance(data.get("feedback_log"), list):
-            FEEDBACK_LOG[:] = data["feedback_log"][-100:]
-        LIVE_TWEET_STORE.update(data.get("tweets") or {})
-        LIVE_MEDIA_STORE.update(data.get("media") or {})
-        MANUAL_STORE.update(data.get("manual") or {})
-        d = data.get("daily") or {}
-        DAILY_TRACKER["date"], DAILY_TRACKER["items"] = d.get("date", ""), d.get("items", {})
-        if isinstance(data.get("keywords"), list) and data["keywords"]:
-            ACTIVE_KEYWORDS[:] = data["keywords"][:10]
-        reevaluate_all_stores()
+        obj = json.loads(raw)
+        b = _day_bucket(date_str)
+        b["tweets"].update(obj.get("tweets") or {})
+        b["media"].update(obj.get("media") or {})
+        b["daily"].update(obj.get("daily") or {})
+        for sub in ("tweets", "media"):
+            for it in b[sub].values():
+                enrich_item(it)
     except Exception as e:
-        log.warning("State load fail: %s", e)
+        log.warning("On-demand day %s load fail: %s", date_str, e)
 
 
-async def save_state(force: bool = False):
-    global _dirty
-    if not _dirty and not force:
-        return
-    _dirty = False
-    tweets, media = dict(LIVE_TWEET_STORE), dict(LIVE_MEDIA_STORE)
+def _serialize_day_safe(b: Dict[str, Dict[str, Any]]) -> str:
+    tweets = dict(b["tweets"])
+    media = dict(b["media"])
+    daily = dict(b["daily"])
     while True:
-        s = json.dumps({
-            "tweets": tweets, "media": media, "manual": MANUAL_STORE, "daily": DAILY_TRACKER,
-            "keywords": ACTIVE_KEYWORDS, "learned": LEARNED_LEXICON, "overrides": ITEM_OVERRIDES,
-            "feedback_log": FEEDBACK_LOG[-100:],
-        }, ensure_ascii=False)
+        s = json.dumps({"tweets": tweets, "media": media, "daily": daily}, ensure_ascii=False)
         if len(s) < 900_000 or (not tweets and not media):
-            break
-        if len(media) > 150:
+            return s
+        if len(media) > 120:
             for k in sorted(media, key=lambda x: media[x].get("ts", 0))[:80]:
                 media.pop(k, None)
-        elif tweets:
+        elif len(tweets) > 120:
             for k in sorted(tweets, key=lambda x: tweets[x].get("ts", 0))[:100]:
                 tweets.pop(k, None)
         else:
             break
-    await _kv_set(s)
+    return s
+
+
+async def save_state(force: bool = False):
+    global _dirty_meta
+    days_to_save = set(DAY_STORES.keys()) if force else set(_dirty_days)
+    save_meta = force or _dirty_meta
+    if not days_to_save and not save_meta:
+        return
+
+    tasks = []
+    if save_meta:
+        _dirty_meta = False
+        meta_str = json.dumps({
+            "keywords": ACTIVE_KEYWORDS,
+            "learned": LEARNED_LEXICON,
+            "overrides": ITEM_OVERRIDES,
+            "feedback_log": FEEDBACK_LOG[-100:],
+            "manual": MANUAL_STORE,
+        }, ensure_ascii=False)
+        tasks.append(_kv_set_key(META_KEY, meta_str, ttl=1209600))  # 14 days for AI Brain
+
+    for d in list(days_to_save):
+        _dirty_days.discard(d)
+        b = DAY_STORES.get(d)
+        if b:
+            tasks.append(_kv_set_key(DAY_KEY_PREFIX + d, _serialize_day_safe(b), ttl=DAY_TTL_SECONDS))
+
+    if tasks:
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        if UPSTASH_URL and UPSTASH_TOKEN and any(r is True for r in results):
+            tot = sum(len(b["tweets"]) + len(b["media"]) for b in DAY_STORES.values())
+            health_ok("Upstash DB", tot)
 
 
 async def autosave_loop():
     ticks = 0
     while True:
-        await asyncio.sleep(90)
+        await asyncio.sleep(45)
         ticks += 1
         try:
-            if ticks % 20 == 0:
+            if ticks % 40 == 0:
                 self_tune_lexicon()
             await save_state()
         except Exception as e:
@@ -821,27 +988,19 @@ async def autosave_loop():
 
 
 async def background_collector_loop():
-    await asyncio.sleep(8)
+    await asyncio.sleep(6)
     while True:
         try:
             kw = list(ACTIVE_KEYWORDS) or list(DEFAULT_KEYWORDS)
-            now_ist = datetime.now(IST)
-            now_ts, today_str = now_ist.timestamp(), now_ist.strftime("%Y-%m-%d")
             x_res, x_ld, n_en, n_hi, papers, yt, extra = await asyncio.gather(
                 get_x_live(kw, False), get_x_leaders_live(False),
                 get_news(kw, "en", None, False), get_news(kw, "hi", None, False),
                 get_papers(False), get_youtube(False), get_extra(False), return_exceptions=True,
             )
-            collected: List[Dict[str, Any]] = []
-            for xr in (x_res, x_ld):
-                if isinstance(xr, tuple) and isinstance(xr[0], list):
-                    collected.extend(xr[0])
             media_batch = [it for res in (n_en, n_hi, papers, yt, extra) if isinstance(res, list) for it in res]
             if media_batch:
-                record_media_items(media_batch, now_ts)
-                collected.extend(media_batch)
-            if collected:
-                record_daily_tracker(collected, today_str)
+                ingest_items(media_batch)
+            await save_state()
         except Exception as e:
             log.warning("bg collector: %s", e)
         await asyncio.sleep(BG_COLLECT_INTERVAL)
@@ -906,7 +1065,9 @@ async def swr(key: str, ttl: float, factory: Callable[[], Awaitable[Any]], force
         return val
 
 
-# ---- X Fetchers ----
+# ============================================================================
+# X (TWITTER) FETCHERS — WITH SMART PAGINATION BACKFILL SO GRAPH HAS FULL DAY!
+# ============================================================================
 def get_cookie_pool():
     pool = []
     for s in ["", "_2", "_3"]:
@@ -941,7 +1102,8 @@ def parse_tweets(tweets, kw: List[str]) -> List[Dict[str, Any]]:
     return out
 
 
-async def x_search(kw: List[str], date_window: Optional[Tuple[str, str]], count: int, force: bool = False, raw_terms: bool = False):
+async def x_search(kw: List[str], date_window: Optional[Tuple[str, str]], count: int,
+                   force: bool = False, raw_terms: bool = False, extra_pages: int = 0):
     global cookie_turn
     pool = get_cookie_pool()
     if not pool:
@@ -958,10 +1120,26 @@ async def x_search(kw: List[str], date_window: Optional[Tuple[str, str]], count:
                 client = Client("en-US")
                 client.set_cookies(pool[idx])
                 X_CLIENTS[idx] = client
-            tweets = await asyncio.wait_for(client.search_tweet(q, "Latest", count=count), timeout=20)
+            res = await asyncio.wait_for(client.search_tweet(q, "Latest", count=count), timeout=20)
+            items = parse_tweets(res, kw)
+            # Optional backfill pagination to pull earlier hours of the day on cold start
+            cur = res
+            for _ in range(extra_pages):
+                if not cur or not hasattr(cur, "next"):
+                    break
+                try:
+                    await asyncio.sleep(0.8)
+                    nxt = await asyncio.wait_for(cur.next(), timeout=15)
+                    more = parse_tweets(nxt, kw)
+                    if not more:
+                        break
+                    items.extend(more)
+                    cur = nxt
+                except Exception:
+                    break
             X_COOLDOWN.pop(idx, None)
             cookie_turn = idx + 1
-            return parse_tweets(tweets, kw)
+            return items
         except Exception as e:
             last_err = e
             X_CLIENTS.pop(idx, None)
@@ -972,31 +1150,37 @@ async def x_search(kw: List[str], date_window: Optional[Tuple[str, str]], count:
     raise last_err or RuntimeError("Sab X accounts cooldown me hain")
 
 
-def prune_live_tweet_store(now_ts: float):
-    cutoff = now_ts - 86400
-    for tid in [t for t, tw in LIVE_TWEET_STORE.items() if tw.get("ts", 0) < cutoff]:
-        LIVE_TWEET_STORE.pop(tid, None)
-    if len(LIVE_TWEET_STORE) > 700:
-        for tid in sorted(LIVE_TWEET_STORE, key=lambda k: LIVE_TWEET_STORE[k].get("ts", 0))[:len(LIVE_TWEET_STORE) - 700]:
-            LIVE_TWEET_STORE.pop(tid, None)
-
-
-def stored_tweets_for(kw: List[str], now_ts: float, include_leaders: bool = True) -> List[Dict[str, Any]]:
-    prune_live_tweet_store(now_ts)
-    want = {k.lower() for k in kw[:7]}
-    rows = [t for t in LIVE_TWEET_STORE.values() if not t.get("kws") or (want & set(t.get("kws", []))) or (include_leaders and bool(t.get("leaders")))]
+def all_recent_tweets(now_ts: float, hours_back: int = 24) -> List[Dict[str, Any]]:
+    cutoff = now_ts - hours_back * 3600
+    rows = [t for b in DAY_STORES.values() for t in b["tweets"].values() if t.get("ts", 0) >= cutoff]
     return sorted(rows, key=lambda x: x["ts"], reverse=True)
 
 
-def _merge_x_items(items: List[Dict[str, Any]]):
-    for tw in items:
-        old = LIVE_TWEET_STORE.get(tw["id"])
-        if old:
-            tw["kws"] = sorted(set(old.get("kws", [])) | set(tw.get("kws", [])))
-            tw["ingested_at"] = old.get("ingested_at", tw["ingested_at"])
-        LIVE_TWEET_STORE[tw["id"]] = tw
-    if items:
-        mark_dirty()
+def all_recent_media(now_ts: float, hours_back: int = 24) -> List[Dict[str, Any]]:
+    cutoff = now_ts - hours_back * 3600
+    rows = [m for b in DAY_STORES.values() for m in b["media"].values() if m.get("ts", 0) >= cutoff]
+    return sorted(rows, key=lambda x: x["ts"], reverse=True)
+
+
+def stored_tweets_for(kw: List[str], now_ts: float, include_leaders: bool = True) -> List[Dict[str, Any]]:
+    want = {k.lower() for k in kw[:7]}
+    rows = [
+        t for t in all_recent_tweets(now_ts, hours_back=24)
+        if not t.get("kws") or (want & set(t.get("kws", []))) or (include_leaders and bool(t.get("leaders")))
+    ]
+    return rows
+
+
+def _needs_today_backfill() -> bool:
+    today = datetime.now(IST).strftime("%Y-%m-%d")
+    if today in _backfill_done_dates:
+        return False
+    b = DAY_STORES.get(today)
+    if not b:
+        return True
+    x_hours = {t.get("hour_ist") for t in b["tweets"].values()}
+    # If we have fewer than 3 distinct hours of X tweets today (e.g. just redeployed), backfill 2 extra pages once
+    return len(x_hours) < 3 and datetime.now(IST).hour >= 3
 
 
 async def get_x_live(kw: List[str], force: bool):
@@ -1006,8 +1190,11 @@ async def get_x_live(kw: List[str], force: bool):
 
     async def factory():
         try:
-            items = await x_search(kw, None, 20, force=force)
-            _merge_x_items(items)
+            do_bf = _needs_today_backfill()
+            items = await x_search(kw, None, 35 if do_bf else 25, force=force, extra_pages=2 if do_bf else 0)
+            if do_bf:
+                _backfill_done_dates.add(datetime.now(IST).strftime("%Y-%m-%d"))
+            ingest_items(items)
             health_ok("X", len(items))
             return {"status": "live", "error": ""}
         except Exception as e:
@@ -1024,8 +1211,8 @@ async def get_x_leaders_live(force: bool = False):
 
     async def factory():
         try:
-            items = await x_search(LEADER_X_QUERY_TERMS, None, 25, force=force, raw_terms=True)
-            _merge_x_items(items)
+            items = await x_search(LEADER_X_QUERY_TERMS, None, 30, force=force, raw_terms=True, extra_pages=1 if _needs_today_backfill() else 0)
+            ingest_items(items)
             health_ok("X Leaders", len(items))
             return {"status": "live", "error": ""}
         except Exception as e:
@@ -1033,7 +1220,8 @@ async def get_x_leaders_live(force: bool = False):
             return {"status": "warning", "error": str(e)[:100]}
 
     res = await swr("x:leaders_stream", 110, factory, force=force, min_gap=45)
-    return sorted([t for t in LIVE_TWEET_STORE.values() if t.get("leaders")], key=lambda x: x["ts"], reverse=True), res["status"], res["error"]
+    rows = [t for t in all_recent_tweets(time.time(), hours_back=24) if t.get("leaders")]
+    return rows, res["status"], res["error"]
 
 
 async def get_x_archive(kw: List[str], force: bool, date_window: Tuple[str, str]):
@@ -1044,7 +1232,8 @@ async def get_x_archive(kw: List[str], force: bool, date_window: Tuple[str, str]
     async def factory():
         prev = (CACHE.get(key) or {}).get("val", {}).get("items", [])
         try:
-            items = await x_search(kw, date_window, 35, force=force)
+            items = await x_search(kw, date_window, 40, force=force, extra_pages=1)
+            ingest_items(items)
             health_ok("X", len(items))
             return {"items": items or prev, "status": "live", "error": ""}
         except Exception as e:
@@ -1203,9 +1392,13 @@ class FeedbackReq(BaseModel):
 
 
 def _find_item(item_id: str) -> Optional[Dict[str, Any]]:
-    for store in (LIVE_TWEET_STORE, LIVE_MEDIA_STORE, MANUAL_STORE):
-        if item_id in store:
-            return store[item_id]
+    if item_id in MANUAL_STORE:
+        return MANUAL_STORE[item_id]
+    for b in DAY_STORES.values():
+        if item_id in b["tweets"]:
+            return b["tweets"][item_id]
+        if item_id in b["media"]:
+            return b["media"][item_id]
     return None
 
 
@@ -1229,7 +1422,7 @@ async def submit_feedback(req: FeedbackReq):
 
     if suspicious and not req.confirm_override:
         warn_msg = (
-            "AI Guardrail Warning: Yeh post Congress/Opposition ka self-praise lag raha hai — BJP tracker ke hisaab se yeh NEUTRAL hona chahiye, Positive nahi. Phir bhi Positive mark karna hai?"
+            "AI Guardrail Warning: Yeh post Congress/Opposition ka self-praise lag raha hai — tracker ke hisaab se yeh NEUTRAL hona chahiye, Positive nahi. Phir bhi Positive mark karna hai?"
             if opp_self_conflict else
             f"AI Guardrail Warning: Is post mein strong {base_label.upper()} signals hain ({', '.join(base['reasons'][:2]) or 'clear polarity'}, {base_conf}% confidence). Agar galti se click hua ho to Cancel karein; pakka {target.upper()} hai to Confirm karein."
         )
@@ -1262,7 +1455,8 @@ async def submit_feedback(req: FeedbackReq):
         del FEEDBACK_LOG[:-100]
 
     reevaluate_all_stores()
-    mark_dirty()
+    mark_meta_dirty()
+    asyncio.create_task(save_state())
     return {
         "status": "overridden_quarantined" if suspicious else "learned",
         "flagged": suspicious, "learned_tokens": learned_tokens[:5],
@@ -1284,6 +1478,7 @@ async def get_learning_stats():
         "total_learned_tokens": len(LEARNED_LEXICON),
         "total_overrides": len(ITEM_OVERRIDES),
         "last_self_tune": LAST_SELF_TUNE_TS,
+        "saved_days": sorted(DAY_STORES.keys(), reverse=True),
         "top_tokens": top_tokens,
         "recent_feedback": list(reversed(FEEDBACK_LOG[-20:])),
     }
@@ -1293,7 +1488,8 @@ async def get_learning_stats():
 async def delete_learned_token(token: str):
     LEARNED_LEXICON.pop(token.lower().strip(), None)
     reevaluate_all_stores()
-    mark_dirty()
+    mark_meta_dirty()
+    asyncio.create_task(save_state())
     return {"ok": True}
 
 
@@ -1329,15 +1525,17 @@ async def add_manual(p: ManualPost):
     if len(MANUAL_STORE) > 300:
         for k in sorted(MANUAL_STORE, key=lambda x: MANUAL_STORE[x]["ts"])[:50]:
             MANUAL_STORE.pop(k, None)
-    record_daily_tracker([item], datetime.now(IST).strftime("%Y-%m-%d"))
-    mark_dirty()
+    ingest_items([item])
+    mark_meta_dirty()
+    asyncio.create_task(save_state())
     return item
 
 
 @app.delete("/api/manual/{item_id}", dependencies=[Depends(require_key)])
 async def delete_manual(item_id: str):
     MANUAL_STORE.pop(item_id, None)
-    mark_dirty()
+    mark_meta_dirty()
+    asyncio.create_task(save_state())
     return {"ok": True}
 
 
@@ -1348,7 +1546,7 @@ async def serve_home():
 
 @app.get("/health")
 async def health():
-    return {"ok": True}
+    return {"ok": True, "days": sorted(DAY_STORES.keys(), reverse=True)}
 
 
 @app.get("/api/ping")
@@ -1366,19 +1564,31 @@ async def pulse(since: float = Query(default=0.0), keywords: str = Query(default
     now_ts = time.time()
     x_items = stored_tweets_for(sanitize_keywords(keywords) or DEFAULT_KEYWORDS, now_ts, include_leaders=True)
     new_x = sum(1 for it in x_items if it.get("ingested_at", it.get("ts", 0)) > since)
-    new_media = sum(1 for it in list(LIVE_MEDIA_STORE.values()) + list(MANUAL_STORE.values())
-                    if it.get("ingested_at", it.get("ts", 0)) > since and it.get("ts", 0) >= (now_ts - 86400))
+    new_media = sum(
+        1 for it in all_recent_media(now_ts, hours_back=24) + list(MANUAL_STORE.values())
+        if it.get("ingested_at", it.get("ts", 0)) > since and it.get("ts", 0) >= (now_ts - 86400)
+    )
     return {"server_time": now_ts, "new_x": new_x, "new_media": new_media, "new_total": new_x + new_media}
 
 
 @app.get("/api/custom-graph", dependencies=[Depends(require_key)])
-async def custom_graph(q: str = Query(default=""), source: str = Query(default="ALL"), leader: str = Query(default="")):
-    hours = list(range(datetime.now(IST).hour + 1))
+async def custom_graph(
+    q: str = Query(default=""),
+    source: str = Query(default="ALL"),
+    leader: str = Query(default=""),
+    date: str = Query(default=""),
+):
+    now_ist = datetime.now(IST)
+    today_str = now_ist.strftime("%Y-%m-%d")
+    dw = validate_date(date, today_str)
+    target_date = dw[0] if dw else today_str
+    await ensure_day_loaded(target_date)
+    hours = list(range(24)) if target_date != today_str else list(range(now_ist.hour + 1))
     pos, neg, neu = {h: 0 for h in hours}, {h: 0 for h in hours}, {h: 0 for h in hours}
     ql, src_f, ld_f = q.strip().lower(), source.upper().strip(), leader.strip().lower()
     qc = re.sub(r"\s+", "", ql)
     matched = 0
-    for rec in DAILY_TRACKER.get("items", {}).values():
+    for rec in _day_bucket(target_date)["daily"].values():
         rsrc = rec.get("source", "")
         if (src_f == "X" and rsrc != "X") or (src_f == "MEDIA" and rsrc == "X"):
             continue
@@ -1417,15 +1627,24 @@ async def api_feed(keywords: str = Query(default=",".join(DEFAULT_KEYWORDS)), fo
     is_archive = date_window is not None and date_window[0] != today_str
     active_date, cutoff = (date_window[0] if is_archive else today_str), now_ts - 86400
 
-    if not is_archive and kw_list:
+    if not is_archive and kw_list and kw_list != ACTIVE_KEYWORDS:
         ACTIVE_KEYWORDS[:] = kw_list[:10]
+        mark_meta_dirty()
 
     if is_archive:
+        # Load saved Upstash history for this back-date FIRST, then merge with archive search!
+        await ensure_day_loaded(active_date)
+        saved_day = _day_bucket(active_date)
         x_res, news_en, news_hi, live_tv = await asyncio.gather(
             get_x_archive(kw_list, force, date_window), get_news(kw_list, "en", date_window, force),
             get_news(kw_list, "hi", date_window, force), get_tv(False),
         )
-        x_ld_items, media_pool = [], news_hi + news_en + [m for m in MANUAL_STORE.values() if m["date_ist"] == active_date]
+        saved_x = list(saved_day["tweets"].values())
+        saved_media = list(saved_day["media"].values())
+        fresh_news = [it for it in (news_hi + news_en) if it.get("date_ist") == active_date]
+        ingest_items(fresh_news)
+        x_ld_items = saved_x
+        media_pool = saved_media + fresh_news + [m for m in MANUAL_STORE.values() if m["date_ist"] == active_date]
     else:
         x_res, x_ld_res, news_en, news_hi, papers, yt_items, extra, live_tv = await asyncio.gather(
             get_x_live(kw_list, force), get_x_leaders_live(False),
@@ -1434,20 +1653,26 @@ async def api_feed(keywords: str = Query(default=",".join(DEFAULT_KEYWORDS)), fo
         )
         x_ld_items = x_ld_res[0] if isinstance(x_ld_res, tuple) else []
         fresh_media = news_hi + news_en + papers + yt_items + extra
-        record_media_items(fresh_media, now_ts)
-        media_pool = list(LIVE_MEDIA_STORE.values()) + fresh_media + [m for m in MANUAL_STORE.values() if m["ts"] >= cutoff]
+        ingest_items(fresh_media)
+        media_pool = all_recent_media(now_ts, hours_back=24) + fresh_media + [m for m in MANUAL_STORE.values() if m["ts"] >= cutoff]
 
     x_items, x_status, x_error = x_res
 
     deduped_x, seen_x = [], set()
     for tw in sorted(x_items + x_ld_items, key=lambda x: x["ts"], reverse=True):
-        if tw["id"] not in seen_x and (is_archive or tw["ts"] >= cutoff):
+        if is_archive and tw.get("date_ist") != active_date:
+            continue
+        if not is_archive and tw.get("ts", 0) < cutoff:
+            continue
+        if tw["id"] not in seen_x:
             seen_x.add(tw["id"])
             deduped_x.append(tw)
 
     deduped_media, seen_media = [], set()
     for it in sorted(media_pool, key=lambda x: x["ts"], reverse=True):
-        if not is_archive and it["ts"] < cutoff:
+        if is_archive and it.get("date_ist") != active_date:
+            continue
+        if not is_archive and it.get("ts", 0) < cutoff:
             continue
         norm = re.sub(r"[^a-zA-Z0-9\u0900-\u097F]+", "", it["text"].lower())[:50]
         k = f"{it['source']}_{norm}" if norm else it["id"]
@@ -1455,8 +1680,9 @@ async def api_feed(keywords: str = Query(default=",".join(DEFAULT_KEYWORDS)), fo
             seen_media.add(k)
             deduped_media.append(it)
 
-    deduped = sorted(deduped_x[:220] + deduped_media[:200], key=lambda x: x["ts"], reverse=True)
+    deduped = sorted(deduped_x[:320] + deduped_media[:220], key=lambda x: x["ts"], reverse=True)
 
+    # Full hourly graph built from persisted Upstash daily tracker for active_date!
     hours = list(range(24)) if is_archive else list(range(now_ist.hour + 1))
     mk = lambda: {h: 0 for h in hours}  # noqa: E731
     h_pos, h_neg, h_neu, hx_pos, hx_neg, hx_neu = mk(), mk(), mk(), mk(), mk(), mk()
@@ -1471,13 +1697,13 @@ async def api_feed(keywords: str = Query(default=",".join(DEFAULT_KEYWORDS)), fo
             x_today_count += 1
             {"positive": hx_pos, "negative": hx_neg}.get(s, hx_neu)[h] += 1
 
-    if is_archive:
-        for it in deduped:
-            bump(it["hour_ist"], it["sentiment"], it["source"])
-    else:
-        record_daily_tracker(deduped, today_str)
-        for rec in DAILY_TRACKER["items"].values():
-            bump(rec.get("hour", 0), rec.get("sentiment", "neutral"), rec.get("source", ""))
+    day_daily = _day_bucket(active_date)["daily"]
+    for it in deduped:
+        if it.get("date_ist") == active_date and it["id"] not in day_daily:
+            day_daily[it["id"]] = _daily_rec(it)
+            mark_day_dirty(active_date)
+    for rec in day_daily.values():
+        bump(rec.get("hour", 0), rec.get("sentiment", "neutral"), rec.get("source", ""))
 
     cnt, xcnt, by_src = {"positive": 0, "negative": 0, "neutral": 0}, {"positive": 0, "negative": 0, "neutral": 0}, {}
     hi_total = en_total = 0
@@ -1550,7 +1776,7 @@ async def api_feed(keywords: str = Query(default=",".join(DEFAULT_KEYWORDS)), fo
         handles_list.append(st)
     handles_list.sort(key=lambda h: (h["total"], h["negative"]), reverse=True)
 
-    # ---- Internet-Wide Prominent Leaders Buzz (Always calculated across X + Media, despite user filter!) ----
+    # ---- Internet-Wide Prominent Leaders Buzz (Always calculated across X + Media, despite filter!) ----
     leader_map = {
         ld["id"]: {
             "id": ld["id"], "name": ld["name"], "role": ld["role"], "party": ld["party"], "handle": ld["handle"],
@@ -1577,21 +1803,18 @@ async def api_feed(keywords: str = Query(default=",".join(DEFAULT_KEYWORDS)), fo
                     row["_tags"][tg] = row["_tags"].get(tg, 0) + 1
                 if row["latest_tweet"] is None:
                     row["latest_tweet"] = {"author": it["author"], "text": it["text"][:160], "sentiment": it["sentiment"], "url": it["url"], "time_str": it["time_str"]}
-                if is_archive and it["hour_ist"] in row["_h_pos"]:
-                    s = it["sentiment"]
-                    row["_h_pos" if s == "positive" else ("_h_neg" if s == "negative" else "_h_neu")][it["hour_ist"]] += 1
             else:
                 row["media_total"] += 1
 
-    if not is_archive:
-        for rec in DAILY_TRACKER.get("items", {}).values():
-            if rec.get("source") != "X":
-                continue
-            h, s = rec.get("hour", 0), rec.get("sentiment", "neutral")
-            bk = "_h_pos" if s == "positive" else ("_h_neg" if s == "negative" else "_h_neu")
-            for lid in rec.get("leaders") or []:
-                if lid in leader_map and h in leader_map[lid][bk]:
-                    leader_map[lid][bk][h] += 1
+    # Leader hourly X chart populated directly from full persisted Upstash day_daily!
+    for rec in day_daily.values():
+        if rec.get("source") != "X":
+            continue
+        h, s = rec.get("hour", 0), rec.get("sentiment", "neutral")
+        bk = "_h_pos" if s == "positive" else ("_h_neg" if s == "negative" else "_h_neu")
+        for lid in rec.get("leaders") or []:
+            if lid in leader_map and h in leader_map[lid][bk]:
+                leader_map[lid][bk][h] += 1
 
     leaders_list = []
     for row in leader_map.values():
@@ -1615,6 +1838,7 @@ async def api_feed(keywords: str = Query(default=",".join(DEFAULT_KEYWORDS)), fo
     return {
         "server_time": now_ts, "updated_at": now_ist.strftime("%d %b %Y, %I:%M:%S %p IST"),
         "mode": "archive" if is_archive else "live", "active_date": active_date, "today_date": today_str,
+        "saved_days": sorted(DAY_STORES.keys(), reverse=True),
         "x_status": x_status, "x_error": x_error, "count": len(deduped),
         "learning": {"tokens": len(LEARNED_LEXICON), "overrides": len(ITEM_OVERRIDES)},
         "stats": {
